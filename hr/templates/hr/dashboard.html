@@ -1,0 +1,146 @@
+{% extends 'hr/base.html' %}
+{% load i18n hr_tags %}
+
+{% block page_title %}{% trans "HR — Dashboard" %}{% endblock %}
+
+{% block hr_content %}
+<div class="container-fluid mt-3">
+    {% if not state %}
+    <div class="alert alert-warning">
+        {% trans "No state has been configured for the HR module. An administrator must set the state in the admin panel." %}
+    </div>
+    {% else %}
+
+    <div class="row g-3 mb-3">
+        <div class="col-sm-6 col-xl-3">
+            <a href="{% url 'hr:member_list' %}" class="text-decoration-none">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <div class="text-muted small text-uppercase">{% trans "Total Members" %}</div>
+                        <div class="fs-2 fw-bold">{{ total_members }}</div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <a href="{% url 'hr:member_list' %}?rank=none" class="text-decoration-none">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <div class="text-muted small text-uppercase">{% trans "No Rank Assigned" %}</div>
+                        <div class="fs-2 fw-bold{% if no_rank > 0 %} text-warning{% endif %}">{{ no_rank }}</div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <a href="{% url 'hr:member_list' %}?mismatch=1" class="text-decoration-none">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <div class="text-muted small text-uppercase">{% trans "Title Mismatches" %}</div>
+                        <div class="fs-2 fw-bold{% if title_mismatches > 0 %} text-warning{% endif %}">{{ title_mismatches }}</div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <a href="{% url 'hr:member_list' %}?audit_issue=1" class="text-decoration-none">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <div class="text-muted small text-uppercase">{% trans "Audit Issues" %}</div>
+                        <div class="fs-2 fw-bold{% if audit_issues > 0 %} text-danger{% endif %}">{{ audit_issues }}</div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <a href="{% url 'hr:unregistered' %}" class="text-decoration-none">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <div class="text-muted small text-uppercase">{% trans "Unregistered" %}</div>
+                        <div class="fs-2 fw-bold{% if unregistered_count > 0 %} text-danger{% endif %}">{{ unregistered_count }}</div>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    {% if issue_members %}
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">{% trans "Issues" %}</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th style="width:40px;"></th>
+                            <th>{% trans "Character" %}</th>
+                            <th>{% trans "Corporation" %}</th>
+                            <th>{% trans "Rank" %}</th>
+                            <th>{% trans "Issue" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for member in issue_members %}
+                        <tr style="cursor:pointer;" onclick="window.location='{% url 'hr:member_detail' member.user.pk %}'">
+                            <td>
+                                <img src="{% eve_image 'character' member.main.character_id 32 %}"
+                                     class="rounded" width="32" height="32" loading="lazy"
+                                     alt="{{ member.main.character_name }}">
+                            </td>
+                            <td>
+                                <a href="{% url 'hr:member_detail' member.user.pk %}" onclick="event.stopPropagation();">
+                                    {{ member.main.character_name }}
+                                </a>
+                            </td>
+                            <td>
+                                <img src="{% eve_image 'corporation' member.main.corporation_id 32 %}"
+                                     class="rounded" width="20" height="20" loading="lazy"
+                                     alt="{{ member.main.corporation_name }}">
+                                {{ member.main.corporation_name }}
+                            </td>
+                            <td>
+                                {% if member.rank %}
+                                <span class="badge bg-info">{{ member.rank.name }}</span>
+                                {% else %}
+                                <span class="text-muted">{% trans "No rank" %}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if not member.rank %}
+                                <span class="badge bg-warning text-dark">
+                                    <i class="fa-solid fa-circle-exclamation"></i> {% trans "No rank assigned" %}
+                                </span>
+                                {% endif %}
+                                {% if member.title_mismatch %}
+                                <span class="badge bg-warning text-dark">
+                                    <i class="fa-solid fa-triangle-exclamation"></i> {% trans "Title mismatch" %}
+                                </span>
+                                {% endif %}
+                                {% if member.has_audit_issue %}
+                                <span class="badge bg-danger">
+                                    <i class="fa-solid fa-database"></i> {% trans "Audit issue" %}
+                                </span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="card">
+        <div class="card-body text-center text-muted py-5">
+            <i class="fa-solid fa-circle-check fa-3x mb-3 text-success"></i>
+            <p class="mb-0">{% trans "No issues found." %}</p>
+        </div>
+    </div>
+    {% endif %}
+
+
+    {% endif %}
+</div>
+{% endblock %}

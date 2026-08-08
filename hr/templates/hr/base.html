@@ -1,0 +1,39 @@
+{% extends "allianceauth/base-bs5.html" %}
+{% load i18n %}
+
+{% block page_title %}{% translate "HR" %}{% endblock page_title %}
+{% block header_nav_brand %}{% translate "HR" %}{% endblock header_nav_brand %}
+
+{% block header_nav_collapse_left %}
+<li class="nav-item">
+    <a class="nav-link" href="{% url 'hr:index' %}">{% translate "Dashboard" %}</a>
+</li>
+<li class="nav-item">
+    <a class="nav-link" href="{% url 'hr:member_list' %}">{% translate "Members" %}</a>
+</li>
+<li class="nav-item">
+    <a class="nav-link" href="{% url 'hr:unregistered' %}">{% translate "Unregistered" %}</a>
+</li>
+<li class="nav-item">
+    <a class="nav-link" href="{% url 'hr:audit' %}">{% translate "Audit Log" %}</a>
+</li>
+{% if perms.hr.manage_roles %}
+<li class="nav-item">
+    <a class="nav-link" href="{% url 'hr:roles' %}">{% translate "Roles" %}</a>
+</li>
+{% endif %}
+{% endblock header_nav_collapse_left %}
+
+{% block content %}
+    {% if messages %}
+    <div class="container-fluid mt-2">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% block hr_content %}{% endblock hr_content %}
+{% endblock content %}

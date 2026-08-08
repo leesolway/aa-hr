@@ -1,0 +1,158 @@
+{% extends 'hr/base.html' %}
+{% load i18n hr_tags %}
+
+{% block page_title %}{% trans "HR — Members" %}{% endblock %}
+
+{% block hr_content %}
+<div class="container-fluid mt-3">
+    {% if not state %}
+    <div class="alert alert-warning">
+        {% trans "No state has been configured for the HR module." %}
+    </div>
+    {% else %}
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">{% trans "Members" %}</h5>
+            <span class="badge bg-primary">{{ member_count }} {% trans "members" %}</span>
+        </div>
+        <div class="card-body p-3 pb-0">
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-sm-4">
+                    <input type="text" name="search" class="form-control form-control-sm"
+                           placeholder="{% trans 'Search name or alt...' %}" value="{{ search }}">
+                </div>
+                <div class="col-sm-3">
+                    <select name="rank" class="form-select form-select-sm">
+                        <option value="">{% trans "All ranks" %}</option>
+                        <option value="none" {% if rank_filter == 'none' %}selected{% endif %}>{% trans "No rank" %}</option>
+                        {% for rank in all_ranks %}
+                        <option value="{{ rank.pk }}" {% if rank_filter == rank.pk|stringformat:'s' %}selected{% endif %}>{{ rank.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-sm-3">
+                    <select name="mismatch" class="form-select form-select-sm">
+                        <option value="">{% trans "All" %}</option>
+                        <option value="1" {% if mismatch_filter == '1' %}selected{% endif %}>{% trans "Title mismatch only" %}</option>
+                    </select>
+                </div>
+                <div class="col-sm-auto">
+                    <button type="submit" class="btn btn-sm btn-primary">{% trans "Filter" %}</button>
+                    <a href="{% url 'hr:member_list' %}" class="btn btn-sm btn-secondary ms-1">{% trans "Clear" %}</a>
+                </div>
+            </form>
+        </div>
+        <div class="card-body p-0 mt-2">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th style="width:40px;"></th>
+                            <th>{% trans "Character" %}</th>
+                            <th>{% trans "Corporation" %}</th>
+                            <th>{% trans "Rank" %}</th>
+                            <th class="text-center">{% trans "Alts" %}</th>
+                            <th>{% trans "Titles" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for member in page_obj %}
+                        <tr style="cursor:pointer;"
+                            onclick="window.location='{% url 'hr:member_detail' member.user.pk %}'"
+                            data-alt-names="{% for alt in member.alts %}{{ alt.character_name }}{% if not forloop.last %}, {% endif %}{% endfor %}">
+                            <td>
+                                <img src="{% eve_image 'character' member.main.character_id 32 %}"
+                                     class="rounded" width="32" height="32" loading="lazy"
+                                     alt="{{ member.main.character_name }}">
+                            </td>
+                            <td>
+                                <a href="{% url 'hr:member_detail' member.user.pk %}" onclick="event.stopPropagation();">
+                                    {{ member.main.character_name }}
+                                </a>
+                            </td>
+                            <td>
+                                <img src="{% eve_image 'corporation' member.main.corporation_id 32 %}"
+                                     class="rounded" width="20" height="20" loading="lazy"
+                                     alt="{{ member.main.corporation_name }}">
+                                {{ member.main.corporation_name }}
+                            </td>
+                            <td>
+                                {% if member.rank %}
+                                <span class="badge bg-info">{{ member.rank.name }}</span>
+                                {% if member.title_mismatch %}
+                                <i class="fa-solid fa-triangle-exclamation text-warning ms-1"
+                                   title="{% trans 'EVE titles out of sync' %}"></i>
+                                {% endif %}
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if member.alt_count > 0 %}
+                                <span class="badge bg-secondary">{{ member.alt_count }}</span>
+                                {% else %}
+                                <span class="text-muted">0</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if member.main.characteraudit.characterroles.titles.all %}
+                                <small class="text-muted">
+                                    {% for t in member.main.characteraudit.characterroles.titles.all %}{{ t.title }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                                </small>
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">{% trans "No members found." %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if page_obj.paginator.num_pages > 1 %}
+            <div class="d-flex justify-content-between align-items-center p-3">
+                <small class="text-muted">
+                    {% trans "Showing" %} {{ page_obj.start_index }}–{{ page_obj.end_index }}
+                    {% trans "of" %} {{ member_count }}
+                </small>
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        {% if page_obj.has_previous %}
+                        <li class="page-item">
+                            <a class="page-link" href="?search={{ search }}&rank={{ rank_filter }}&mismatch={{ mismatch_filter }}&page={{ page_obj.previous_page_number }}">&laquo;</a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
+                        {% endif %}
+                        {% for num in page_obj.paginator.page_range %}
+                            {% if page_obj.number == num %}
+                            <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                            {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %}
+                            <li class="page-item"><a class="page-link" href="?search={{ search }}&rank={{ rank_filter }}&mismatch={{ mismatch_filter }}&page={{ num }}">{{ num }}</a></li>
+                            {% elif num == 1 or num == page_obj.paginator.num_pages %}
+                            <li class="page-item"><a class="page-link" href="?search={{ search }}&rank={{ rank_filter }}&mismatch={{ mismatch_filter }}&page={{ num }}">{{ num }}</a></li>
+                            {% elif num == page_obj.number|add:"-3" or num == page_obj.number|add:"3" %}
+                            <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
+                            {% endif %}
+                        {% endfor %}
+                        {% if page_obj.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="?search={{ search }}&rank={{ rank_filter }}&mismatch={{ mismatch_filter }}&page={{ page_obj.next_page_number }}">&raquo;</a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

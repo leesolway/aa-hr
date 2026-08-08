@@ -1,0 +1,286 @@
+{% extends 'hr/base.html' %}
+{% load i18n hr_tags %}
+
+{% block page_title %}{% if main %}{{ main.character_name }}{% else %}{{ member_user }}{% endif %} — {% trans "HR" %}{% endblock %}
+
+{% block hr_content %}
+<div class="container-fluid mt-3">
+    <div class="mb-3">
+        <a href="{% url 'hr:member_list' %}" class="btn btn-sm btn-secondary">
+            <i class="fa-solid fa-arrow-left"></i> {% trans "Back to Members" %}
+        </a>
+    </div>
+
+    <div class="row">
+        <!-- Character info -->
+        <div class="col-lg-4 mb-3">
+            <div class="card">
+                <div class="card-header"><h5 class="mb-0">{% trans "Character" %}</h5></div>
+                <div class="card-body text-center">
+                    {% if main %}
+                    <img src="{% eve_image 'character' main.character_id 128 %}"
+                         class="rounded mb-3" width="128" height="128" alt="{{ main.character_name }}">
+                    <h4>{{ main.character_name }}</h4>
+                    <p class="mb-1">
+                        <img src="{% eve_image 'corporation' main.corporation_id 32 %}"
+                             class="rounded" width="20" height="20" loading="lazy"
+                             alt="{{ main.corporation_name }}">
+                        {{ main.corporation_name }}
+                    </p>
+                    {% if main.alliance_id %}
+                    <p class="mb-1">
+                        <img src="{% eve_image 'alliance' main.alliance_id 32 %}"
+                             class="rounded" width="20" height="20" loading="lazy"
+                             alt="{{ main.alliance_name }}">
+                        {{ main.alliance_name }}
+                    </p>
+                    {% endif %}
+                    {% endif %}
+                    <div class="mt-2">
+                        {% if current_rank %}
+                        <span class="badge bg-info fs-6">{{ current_rank.name }}</span>
+                        {% else %}
+                        <span class="text-muted">{% trans "No rank assigned" %}</span>
+                        {% endif %}
+                    </div>
+                    {% if main %}
+                    <div class="mt-3">
+                        {% zkillboard_url main.character_id as zkill %}
+                        <a href="{{ zkill }}" target="_blank" rel="noopener noreferrer" class="me-3">
+                            <i class="fa-solid fa-skull-crossbones"></i> zKillboard
+                        </a>
+                        {% evewho_url main.character_id as evewho %}
+                        <a href="{{ evewho }}" target="_blank" rel="noopener noreferrer">
+                            <i class="fa-solid fa-address-card"></i> Eve-Who
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Rank assignment -->
+        {% if can_assign or can_remove %}
+        <div class="col-lg-4 mb-3">
+            <div class="card">
+                <div class="card-header"><h5 class="mb-0"><i class="fa-solid fa-user-gear"></i> {% trans "Assign Rank" %}</h5></div>
+                <div class="card-body">
+                    <form method="post" action="{% url 'hr:set_rank' member_user.pk %}">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold" for="rank-select">{% trans "Rank" %}</label>
+                            <select id="rank-select" name="rank_id" class="form-select">
+                                {% if can_remove %}
+                                <option value="0"{% if not current_rank %} selected{% endif %}>{% trans "— No rank —" %}</option>
+                                {% endif %}
+                                {% for rank in assignable_ranks %}
+                                <option value="{{ rank.pk }}"{% if current_rank and current_rank.pk == rank.pk %} selected{% endif %}>
+                                    {{ rank.name }}{% if rank.description %} — {{ rank.description|truncatechars:40 }}{% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold" for="rank-notes">{% trans "Notes" %}</label>
+                            <textarea id="rank-notes" name="notes" class="form-control" rows="2"
+                                      placeholder="{% trans 'Reason for rank change (optional)' %}"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">{% trans "Save Rank" %}</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Title sync -->
+        {% if current_rank %}
+        <div class="col-lg-4 mb-3">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        {% if missing_title_chars %}
+                        <i class="fa-solid fa-triangle-exclamation text-warning"></i>
+                        {% else %}
+                        <i class="fa-solid fa-circle-check text-success"></i>
+                        {% endif %}
+                        {% trans "EVE Title Sync" %}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="mb-1">
+                        <strong>{% trans "Expected title:" %}</strong>
+                        <code>{{ current_rank.corp_title.title|default:"—" }}</code>
+                    </p>
+                    {% if not current_rank.corp_title %}
+                    <p class="text-muted small">{% trans "No EVE title configured for this rank." %}</p>
+                    {% elif missing_title_chars %}
+                    <p class="text-warning mb-1">{% trans "Characters missing this title:" %}</p>
+                    <ul class="list-unstyled mb-0">
+                        {% for char in missing_title_chars %}
+                        <li>
+                            <img src="{% eve_image 'character' char.character_id 20 %}"
+                                 class="rounded me-1" width="20" height="20" loading="lazy"
+                                 alt="{{ char.character_name }}">
+                            {{ char.character_name }}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-success mb-0">{% trans "All characters have the correct title." %}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Audit status + TeamSpeak -->
+    <div class="row">
+        {% if audit_issue_chars %}
+        <div class="col-lg-6 mb-3">
+            <div class="card border-danger">
+                <div class="card-header text-bg-danger">
+                    <h5 class="mb-0"><i class="fa-solid fa-database"></i> {% trans "Corptools Audit Issues" %}</h5>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th style="width:40px;"></th>
+                                <th>{% trans "Character" %}</th>
+                                <th>{% trans "Problem" %}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for char, kind in audit_issue_chars %}
+                            <tr>
+                                <td><img src="{% eve_image 'character' char.character_id 32 %}"
+                                         class="rounded" width="32" height="32" loading="lazy"
+                                         alt="{{ char.character_name }}"></td>
+                                <td>{{ char.character_name }}</td>
+                                <td>
+                                    {% if kind == "missing" %}
+                                    <span class="badge bg-danger">{% trans "No audit" %}</span>
+                                    {% else %}
+                                    <span class="badge bg-warning text-dark">{% trans "Stale" %}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="col-lg-6 mb-3">
+            <div class="card">
+                <div class="card-header"><h5 class="mb-0"><i class="fa-solid fa-headset"></i> {% trans "TeamSpeak" %}</h5></div>
+                <div class="card-body">
+                    {% if teamspeak3_user %}
+                    <dl class="mb-0">
+                        <dt class="text-muted small text-uppercase">{% trans "UID" %}</dt>
+                        <dd><code>{{ teamspeak3_user.uid }}</code></dd>
+                        <dt class="text-muted small text-uppercase">{% trans "Registration Key" %}</dt>
+                        <dd class="mb-0"><code>{{ teamspeak3_user.perm_key }}</code></dd>
+                    </dl>
+                    {% else %}
+                    <p class="text-muted mb-0">{% trans "No TeamSpeak account registered." %}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alts -->
+    {% if alts %}
+    <div class="card mb-3">
+        <div class="card-header">
+            <h5 class="mb-0">{% trans "Alts" %} <span class="badge bg-secondary">{{ alts|length }}</span></h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th style="width:40px;"></th>
+                            <th>{% trans "Character" %}</th>
+                            <th>{% trans "Corporation" %}</th>
+                            <th class="text-center">{% trans "Links" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for alt in alts %}
+                        <tr>
+                            <td><img src="{% eve_image 'character' alt.character_id 32 %}"
+                                     class="rounded" width="32" height="32" loading="lazy"
+                                     alt="{{ alt.character_name }}"></td>
+                            <td>{{ alt.character_name }}</td>
+                            <td>
+                                <img src="{% eve_image 'corporation' alt.corporation_id 32 %}"
+                                     class="rounded" width="20" height="20" loading="lazy"
+                                     alt="{{ alt.corporation_name }}">
+                                {{ alt.corporation_name }}
+                            </td>
+                            <td class="text-center">
+                                {% zkillboard_url alt.character_id as zkill %}
+                                <a href="{{ zkill }}" target="_blank" rel="noopener noreferrer">
+                                    <i class="fa-solid fa-skull-crossbones"></i>
+                                </a>
+                                {% evewho_url alt.character_id as evewho %}
+                                <a href="{{ evewho }}" target="_blank" rel="noopener noreferrer" class="ms-2">
+                                    <i class="fa-solid fa-address-card"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Rank history -->
+    <div class="card mb-3">
+        <div class="card-header"><h5 class="mb-0">{% trans "Rank History" %}</h5></div>
+        <div class="card-body p-0">
+            {% if history %}
+            <div class="table-responsive">
+                <table class="table table-sm table-striped mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>{% trans "Date" %}</th>
+                            <th>{% trans "Rank" %}</th>
+                            <th>{% trans "Assigned by" %}</th>
+                            <th>{% trans "Notes" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for assignment in history %}
+                        <tr>
+                            <td><small>{{ assignment.assigned_at|date:"Y-m-d H:i" }}</small></td>
+                            <td><span class="badge bg-secondary">{{ assignment.rank.name }}</span></td>
+                            <td>
+                                {% if assignment.assigned_by %}
+                                {% with ab=assignment.assigned_by.profile.main_character %}
+                                    {% if ab %}{{ ab.character_name }}{% else %}{{ assignment.assigned_by }}{% endif %}
+                                {% endwith %}
+                                {% else %}
+                                <span class="text-muted">{% trans "System" %}</span>
+                                {% endif %}
+                            </td>
+                            <td><small class="text-muted">{{ assignment.notes|default:"—" }}</small></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="card-body text-muted">{% trans "No previous rank assignments." %}</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

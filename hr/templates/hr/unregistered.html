@@ -1,0 +1,114 @@
+{% extends 'hr/base.html' %}
+{% load i18n hr_tags %}
+
+{% block page_title %}{% trans "HR — Unregistered Characters" %}{% endblock %}
+
+{% block hr_content %}
+<div class="container-fluid mt-3">
+
+    {% if not state %}
+    <div class="alert alert-warning">{% trans "No state configured. Set a member state in HR Configuration." %}</div>
+    {% else %}
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0">
+            {% trans "Unregistered Characters" %}
+            <span class="badge bg-secondary ms-1">{{ total }}</span>
+        </h5>
+        <small class="text-muted">{% blocktrans with name=state.name %}Characters in {{ name }} corps/alliances with no AllianceAuth account{% endblocktrans %}</small>
+    </div>
+
+    <!-- Search -->
+    <form method="get" class="row g-2 mb-3">
+        <div class="col-sm-4">
+            <input type="text" name="search" class="form-control" value="{{ search }}"
+                   placeholder="{% trans 'Search by character name…' %}">
+        </div>
+        <div class="col-sm-auto">
+            <button type="submit" class="btn btn-secondary">{% trans "Search" %}</button>
+            {% if search %}<a href="{% url 'hr:unregistered' %}" class="btn btn-outline-secondary ms-1">{% trans "Clear" %}</a>{% endif %}
+        </div>
+    </form>
+
+    {% if page_obj.object_list %}
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th style="width:40px;"></th>
+                            <th>{% trans "Character" %}</th>
+                            <th>{% trans "Corporation" %}</th>
+                            <th>{% trans "Alliance" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for char in page_obj %}
+                        <tr>
+                            <td>
+                                <img src="{% eve_image 'character' char.character_id 32 %}"
+                                     class="rounded" width="32" height="32" loading="lazy"
+                                     alt="{{ char.character_name }}">
+                            </td>
+                            <td>{{ char.character_name }}</td>
+                            <td>
+                                <img src="{% eve_image 'corporation' char.corporation_id 32 %}"
+                                     class="rounded me-1" width="20" height="20" loading="lazy"
+                                     alt="{{ char.corporation_name }}">
+                                {{ char.corporation_name }}
+                            </td>
+                            <td>
+                                {% if char.alliance_id %}
+                                <img src="{% eve_image 'alliance' char.alliance_id 32 %}"
+                                     class="rounded me-1" width="20" height="20" loading="lazy"
+                                     alt="{{ char.alliance_name }}">
+                                {{ char.alliance_name }}
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <nav class="mt-3">
+        <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}">«</a>
+            </li>
+            {% endif %}
+            <li class="page-item disabled">
+                <span class="page-link">{% blocktrans with num=page_obj.number total=page_obj.paginator.num_pages %}Page {{ num }} of {{ total }}{% endblocktrans %}</span>
+            </li>
+            {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}">»</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+
+    {% else %}
+    <div class="card">
+        <div class="card-body text-muted text-center py-4">
+            {% if search %}
+            {% trans "No unregistered characters match your search." %}
+            {% else %}
+            {% trans "No unregistered characters found — all known characters in this state have accounts." %}
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,3 @@
+include README.md
+recursive-include hr/templates *
+recursive-include hr/static *
