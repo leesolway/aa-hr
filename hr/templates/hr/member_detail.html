@@ -11,102 +11,92 @@
         </a>
     </div>
 
-    <!-- Row 1: Character info + Current state summary -->
-    <div class="row mb-3">
-        <div class="col-lg-3 mb-3 mb-lg-0">
+    {# Header banner — same style as member dashboard #}
+    <div class="card mb-3">
+        {% if main %}
+        <div class="d-flex justify-content-start align-items-center flex-nowrap">
+            <img src="{% eve_image 'character' main.character_id 64 %}"
+                 class="m-0 flex-shrink-0"
+                 style="border-radius: 0.375rem 0 0 0.375rem;"
+                 width="64" height="64"
+                 alt="{{ main.character_name }}">
+            <h4 class="m-1 mx-3 text-truncate mb-0">{{ main.character_name }}</h4>
+            <img src="{% eve_image 'corporation' main.corporation_id 32 %}"
+                 class="flex-shrink-0" style="border-radius: 25%;"
+                 width="32" height="32" loading="lazy"
+                 alt="{{ main.corporation_name }}">
+            <h5 class="m-1 mx-3 text-truncate mb-0">{{ main.corporation_name }}</h5>
+            {% if main.alliance_id %}
+            <img src="{% eve_image 'alliance' main.alliance_id 32 %}"
+                 class="flex-shrink-0" style="border-radius: 25%;"
+                 width="32" height="32" loading="lazy"
+                 alt="{{ main.alliance_name }}">
+            <h5 class="m-1 mx-3 text-truncate mb-0">{{ main.alliance_name }}</h5>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="card-body">
+            <span class="text-muted">{% trans "No main character set." %}</span>
+        </div>
+        {% endif %}
+    </div>
+
+    {# Links | Member Overview | TeamSpeak — three equal columns #}
+    <div class="row g-3 mb-3">
+
+        {# Links #}
+        <div class="col-lg-4">
             <div class="card h-100">
-                <div class="card-header"><h5 class="mb-0">{% trans "Character" %}</h5></div>
-                <div class="card-body text-center">
+                <div class="card-header"><h5 class="mb-0"><i class="fa-solid fa-link"></i> {% trans "Links" %}</h5></div>
+                <div class="card-body p-0">
                     {% if main %}
-                    <img src="{% eve_image 'character' main.character_id 128 %}"
-                         class="rounded mb-3" width="128" height="128" alt="{{ main.character_name }}">
-                    <h4>{{ main.character_name }}</h4>
-                    <p class="mb-1">
-                        <img src="{% eve_image 'corporation' main.corporation_id 32 %}"
-                             class="rounded" width="20" height="20" loading="lazy"
-                             alt="{{ main.corporation_name }}">
-                        {{ main.corporation_name }}
-                    </p>
-                    {% if main.alliance_id %}
-                    <p class="mb-1">
-                        <img src="{% eve_image 'alliance' main.alliance_id 32 %}"
-                             class="rounded" width="20" height="20" loading="lazy"
-                             alt="{{ main.alliance_name }}">
-                        {{ main.alliance_name }}
-                    </p>
-                    {% endif %}
-                    <div class="mt-3">
-                        {% zkillboard_url main.character_id as zkill %}
-                        <a href="{{ zkill }}" target="_blank" rel="noopener noreferrer" class="me-3">
-                            <i class="fa-solid fa-skull-crossbones"></i> zKillboard
-                        </a>
-                        {% evewho_url main.character_id as evewho %}
-                        <a href="{{ evewho }}" target="_blank" rel="noopener noreferrer">
-                            <i class="fa-solid fa-address-card"></i> Eve-Who
-                        </a>
-                        <a href="{% url 'corptools:reactmain' main.character_id %}" target="_blank" rel="noopener noreferrer" class="ms-3">
-                            <i class="fa-solid fa-magnifying-glass"></i> Audit
-                        </a>
-                    </div>
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            <tr>
+                                <td class="ps-3 align-middle text-muted" style="width:40%;">{% trans "zKillboard" %}</td>
+                                <td class="align-middle">
+                                    {% zkillboard_url main.character_id as zkill %}
+                                    <a href="{{ zkill }}" target="_blank" rel="noopener noreferrer">
+                                        <i class="fa-solid fa-skull-crossbones me-1"></i>{{ main.character_name }}
+                                    </a>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="ps-3 align-middle text-muted">{% trans "Eve-Who" %}</td>
+                                <td class="align-middle">
+                                    {% evewho_url main.character_id as evewho %}
+                                    <a href="{{ evewho }}" target="_blank" rel="noopener noreferrer">
+                                        <i class="fa-solid fa-address-card me-1"></i>{{ main.character_name }}
+                                    </a>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="ps-3 align-middle text-muted">{% trans "Audit" %}</td>
+                                <td class="align-middle">
+                                    <a href="{% url 'corptools:reactmain' main.character_id %}" target="_blank" rel="noopener noreferrer">
+                                        <i class="fa-solid fa-magnifying-glass me-1"></i>{{ main.character_name }}
+                                    </a>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p class="text-muted mb-0 p-3">{% trans "No main character set." %}</p>
                     {% endif %}
                 </div>
             </div>
         </div>
 
-        <div class="col-lg-9">
-            <div class="card h-100">
-                <div class="card-header"><h5 class="mb-0"><i class="fa-solid fa-clipboard-list"></i> {% trans "Member Overview" %}</h5></div>
-                <div class="card-body p-0">
-                    <table class="table table-sm mb-0">
-                        <tbody>
-                            <tr>
-                                <th style="width:140px;" class="ps-3 align-middle">{% trans "Rank" %}</th>
-                                <td class="align-middle">
-                                    {% if current_rank %}
-                                    <span class="badge bg-info fs-6">{{ current_rank.name }}</span>
-                                    {% else %}
-                                    <span class="text-muted">{% trans "No rank assigned" %}</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            <tr>
-                                <th class="ps-3 align-middle">{% trans "Status" %}</th>
-                                <td class="align-middle">
-                                    {% if current_status_assignment %}
-                                    <span class="badge bg-warning text-dark fs-6">
-                                        <i class="fa-solid fa-clock"></i> {{ current_status_assignment.status.name }}
-                                    </span>
-                                    {% if current_status_assignment.notes %}
-                                    <span class="text-muted small ms-2">{{ current_status_assignment.notes }}</span>
-                                    {% endif %}
-                                    <div class="text-muted small mt-1">
-                                        {% trans "Set" %} {{ current_status_assignment.set_at|date:"Y-m-d" }}
-                                        {% if current_status_assignment.set_by %}{% trans "by" %} {{ current_status_assignment.set_by }}{% endif %}
-                                    </div>
-                                    {% else %}
-                                    <span class="text-muted">{% trans "Active" %}</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% if member_role_assignments is not None %}
-                            <tr>
-                                <th class="ps-3 align-middle">{% trans "Roles" %}</th>
-                                <td class="align-middle">
-                                    {% if member_role_assignments %}
-                                    {% for ra in member_role_assignments %}
-                                    <span class="badge bg-primary me-1">{{ ra.role.name }}</span>
-                                    {% endfor %}
-                                    {% else %}
-                                    <span class="text-muted">{% trans "None" %}</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endif %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+        {# Member Overview #}
+        <div class="col-lg-4">
+            {% include 'hr/partials/member_overview_card.html' with overview_roles=member_role_assignments %}
         </div>
+
+        {# TeamSpeak #}
+        <div class="col-lg-4">
+            {% include 'hr/partials/teamspeak_card.html' %}
+        </div>
+
     </div>
 
     <!-- Row 2: Action cards — Assign Rank | Member Status | HR Roles -->
@@ -361,9 +351,6 @@
         </div>
         {% endif %}
 
-        <div class="col-lg-4 mb-3">
-            {% include 'hr/partials/teamspeak_card.html' %}
-        </div>
     </div>
 
     <!-- Alts -->

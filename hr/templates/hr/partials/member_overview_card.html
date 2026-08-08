@@ -1,0 +1,56 @@
+{% load i18n %}
+<div class="card">
+    <div class="card-header"><h6 class="mb-0">{% trans "Overview" %}</h6></div>
+    <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+            <tbody>
+                <tr>
+                    <th style="width:100px;" class="ps-3 align-middle">{% trans "Rank" %}</th>
+                    <td class="align-middle">
+                        {% if current_rank %}
+                        <span class="badge bg-info fs-6">{{ current_rank.name }}</span>
+                        {% if current_rank.description %}
+                        <div class="text-muted small mt-1">{{ current_rank.description }}</div>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-muted">{% trans "No rank assigned" %}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <th class="ps-3 align-middle">{% trans "Status" %}</th>
+                    <td class="align-middle">
+                        {% if current_status_assignment %}
+                        <span class="badge bg-warning text-dark fs-6">
+                            <i class="fa-solid fa-clock"></i> {{ current_status_assignment.status.name }}
+                        </span>
+                        {% if current_status_assignment.notes %}
+                        <span class="text-muted small ms-2">{{ current_status_assignment.notes }}</span>
+                        {% endif %}
+                        <div class="text-muted small mt-1">
+                            {% trans "Set" %} {{ current_status_assignment.set_at|date:"Y-m-d" }}
+                            {% if current_status_assignment.set_by %}{% trans "by" %} {{ current_status_assignment.set_by }}{% endif %}
+                        </div>
+                        {% else %}
+                        <span class="text-muted">{% trans "Active" %}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% if overview_roles is not None %}
+                <tr>
+                    <th class="ps-3 align-middle">{% trans "Roles" %}</th>
+                    <td class="align-middle">
+                        {% if overview_roles %}
+                        {% for ra in overview_roles %}
+                        <span class="badge bg-primary me-1">{{ ra.role.name }}</span>
+                        {% endfor %}
+                        {% else %}
+                        <span class="text-muted">{% trans "None" %}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>

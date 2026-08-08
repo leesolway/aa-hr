@@ -41,23 +41,21 @@
         {# ── Left column: rank & status ───────────────────── #}
         <div class="col-lg-4">
 
-            {# Rank #}
-            <div class="card mb-3">
-                <div class="card-header"><h6 class="mb-0">{% trans "Rank" %}</h6></div>
-                <div class="card-body">
-                    {% if current_rank %}
-                    <span class="badge bg-info fs-6">{{ current_rank.name }}</span>
-                    {% if current_rank.description %}
-                    <p class="text-muted small mt-2 mb-0">{{ current_rank.description }}</p>
-                    {% endif %}
-                    {% else %}
-                    <span class="text-muted">{% trans "No rank assigned" %}</span>
-                    {% endif %}
-                </div>
+            {# Overview — rank / status / roles #}
+            <div class="mb-3">
+                {% include 'hr/partials/member_overview_card.html' with overview_roles=role_assignments %}
             </div>
 
+            {# TeamSpeak #}
+            {% include 'hr/partials/teamspeak_card.html' %}
+
+        </div>
+
+        {# ── Right column: status + labels ────────────────────────────────── #}
+        <div class="col-lg-8">
+
             {# Status #}
-            <div class="card">
+            <div class="card mb-3">
                 <div class="card-header"><h6 class="mb-0">{% trans "Status" %}</h6></div>
                 <ul class="list-group list-group-flush">
                     {# Active option — clears any current status #}
@@ -109,33 +107,6 @@
                 </div>
                 {% endif %}
             </div>
-
-            {# Roles (read-only) #}
-            {% if role_assignments %}
-            <div class="card mt-3">
-                <div class="card-header"><h6 class="mb-0">{% trans "Roles" %}</h6></div>
-                <ul class="list-group list-group-flush">
-                    {% for ra in role_assignments %}
-                    <li class="list-group-item">
-                        <div class="fw-semibold small">{{ ra.role.name }}</div>
-                        <div class="mt-1">
-                            {% for rank in ra.role.can_assign.all %}
-                            <span class="badge bg-success">{{ rank.name }}</span>
-                            {% endfor %}
-                            {% for rank in ra.role.can_remove.all %}
-                            <span class="badge bg-danger">{{ rank.name }}</span>
-                            {% endfor %}
-                        </div>
-                    </li>
-                    {% endfor %}
-                </ul>
-            </div>
-            {% endif %}
-
-        </div>
-
-        {# ── Right column: labels + characters table ──────────────────────── #}
-        <div class="col-lg-8">
 
             <div class="card mb-3">
                 <div class="card-header"><h6 class="mb-0">{% trans "Labels" %}</h6></div>
@@ -224,12 +195,6 @@
         </div>
     </div>{# end rank+status / labels row #}
 
-    {# TeamSpeak #}
-    <div class="row g-3 mt-3">
-        <div class="col-lg-4">
-            {% include 'hr/partials/teamspeak_card.html' %}
-        </div>
-    </div>
 
     {# Characters — full width #}
     {% if characters %}
