@@ -24,3 +24,9 @@ def zkillboard_url(character_id):
 @register.simple_tag
 def evewho_url(character_id):
     return f"https://evewho.com/character/{character_id}"
+
+
+@register.filter
+def is_in(value, collection):
+    """Return True if value is in collection. Usage: {{ pk|is_in:current_label_ids }}"""
+    return value in collection

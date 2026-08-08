@@ -1,0 +1,317 @@
+{% extends 'hr/base.html' %}
+{% load i18n hr_tags %}
+
+{% block page_title %}{% trans "My HR Profile" %}{% endblock %}
+
+{% block hr_content %}
+<div class="container-fluid mt-3">
+
+    {# Profile card — full width #}
+    <div class="card mb-3">
+        {% if main %}
+        <div class="d-flex justify-content-start align-items-center flex-nowrap">
+            <img src="{% eve_image 'character' main.character_id 64 %}"
+                 class="m-0 flex-shrink-0"
+                 style="border-radius: 0.375rem 0 0 0.375rem;"
+                 width="64" height="64"
+                 alt="{{ main.character_name }}">
+            <h4 class="m-1 mx-3 text-truncate mb-0">{{ main.character_name }}</h4>
+            <img src="{% eve_image 'corporation' main.corporation_id 32 %}"
+                 class="flex-shrink-0" style="border-radius: 25%;"
+                 width="32" height="32" loading="lazy"
+                 alt="{{ main.corporation_name }}">
+            <h5 class="m-1 mx-3 text-truncate mb-0">{{ main.corporation_name }}</h5>
+            {% if main.alliance_id %}
+            <img src="{% eve_image 'alliance' main.alliance_id 32 %}"
+                 class="flex-shrink-0" style="border-radius: 25%;"
+                 width="32" height="32" loading="lazy"
+                 alt="{{ main.alliance_name }}">
+            <h5 class="m-1 mx-3 text-truncate mb-0">{{ main.alliance_name }}</h5>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="card-body">
+            <span class="text-muted">{% trans "No main character set." %}</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="row g-3">
+
+        {# ── Left column: rank & status ───────────────────── #}
+        <div class="col-lg-4">
+
+            {# Rank #}
+            <div class="card mb-3">
+                <div class="card-header"><h6 class="mb-0">{% trans "Rank" %}</h6></div>
+                <div class="card-body">
+                    {% if current_rank %}
+                    <span class="badge bg-info fs-6">{{ current_rank.name }}</span>
+                    {% if current_rank.description %}
+                    <p class="text-muted small mt-2 mb-0">{{ current_rank.description }}</p>
+                    {% endif %}
+                    {% else %}
+                    <span class="text-muted">{% trans "No rank assigned" %}</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# Status #}
+            <div class="card">
+                <div class="card-header"><h6 class="mb-0">{% trans "Status" %}</h6></div>
+                <ul class="list-group list-group-flush">
+                    {# Active option — clears any current status #}
+                    <li class="list-group-item d-flex align-items-center gap-3">
+                        <form method="post" action="{% url 'hr:self_set_status' %}" class="flex-shrink-0">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="clear">
+                            {% if not current_status_assignment %}
+                            <button type="submit" class="btn btn-sm btn-success" style="min-width:7rem" disabled>
+                                <i class="fa-solid fa-check me-1"></i>{% trans "Active" %}
+                            </button>
+                            {% else %}
+                            <button type="submit" class="btn btn-sm btn-outline-light" style="min-width:7rem">
+                                {% trans "Active" %}
+                            </button>
+                            {% endif %}
+                        </form>
+                        <span class="text-muted small">{% trans "Normal — no status set" %}</span>
+                    </li>
+                    {# Each member-assignable status #}
+                    {% for status in assignable_statuses %}
+                    <li class="list-group-item d-flex align-items-center gap-3">
+                        <form method="post" action="{% url 'hr:self_set_status' %}" class="flex-shrink-0">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="set">
+                            <input type="hidden" name="status_id" value="{{ status.pk }}">
+                            {% if current_status_assignment and current_status_assignment.status_id == status.pk %}
+                            <button type="submit" class="btn btn-sm btn-success" style="min-width:7rem" disabled>
+                                <i class="fa-solid fa-check me-1"></i>{{ status.name }}
+                            </button>
+                            {% else %}
+                            <button type="submit" class="btn btn-sm btn-outline-light" style="min-width:7rem">
+                                {{ status.name }}
+                            </button>
+                            {% endif %}
+                        </form>
+                        {% if status.description %}
+                        <span class="text-muted small">{{ status.description }}</span>
+                        {% endif %}
+                        {% if current_status_assignment and current_status_assignment.status_id == status.pk and current_status_assignment.notes %}
+                        <span class="text-muted small fst-italic">{{ current_status_assignment.notes }}</span>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% if current_status_assignment %}
+                <div class="card-footer text-muted small">
+                    {% trans "Since" %} {{ current_status_assignment.set_at|date:"Y-m-d" }}
+                </div>
+                {% endif %}
+            </div>
+
+            {# Roles (read-only) #}
+            {% if role_assignments %}
+            <div class="card mt-3">
+                <div class="card-header"><h6 class="mb-0">{% trans "Roles" %}</h6></div>
+                <ul class="list-group list-group-flush">
+                    {% for ra in role_assignments %}
+                    <li class="list-group-item">
+                        <div class="fw-semibold small">{{ ra.role.name }}</div>
+                        <div class="mt-1">
+                            {% for rank in ra.role.can_assign.all %}
+                            <span class="badge bg-success">{{ rank.name }}</span>
+                            {% endfor %}
+                            {% for rank in ra.role.can_remove.all %}
+                            <span class="badge bg-danger">{{ rank.name }}</span>
+                            {% endfor %}
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+        </div>
+
+        {# ── Right column: labels + characters table ──────────────────────── #}
+        <div class="col-lg-8">
+
+            <div class="card mb-3">
+                <div class="card-header"><h6 class="mb-0">{% trans "Labels" %}</h6></div>
+                <div class="card-body p-0">
+
+                    {% if not label_categories and not uncategorised_labels %}
+                    <p class="text-muted mb-0 p-3">{% trans "No self-assignable labels are available." %}</p>
+                    {% else %}
+
+                    {# Categorised labels #}
+                    {% for category in label_categories %}
+                    <div class="px-3 pt-3 {% if not forloop.last or uncategorised_labels %}pb-1{% else %}pb-3{% endif %}">
+                        <h6 class="text-muted text-uppercase small fw-semibold mb-0">{{ category.name }}</h6>
+                        {% if category.description %}
+                        <p class="text-muted small mb-0">{{ category.description }}</p>
+                        {% endif %}
+                    </div>
+                    <ul class="list-group list-group-flush">
+                        {% for label in category.labels.all %}
+                        {% if label.is_active and label.member_assignable %}
+                        {% with assigned=label.pk|is_in:current_label_ids %}
+                        <li class="list-group-item d-flex align-items-center gap-3">
+                            <form method="post" action="{% url 'hr:self_assign_label' label.pk %}" class="flex-shrink-0">
+                                {% csrf_token %}
+                                {% if assigned %}
+                                <input type="hidden" name="action" value="remove">
+                                <button type="submit" class="btn btn-sm btn-success" style="min-width:7rem">
+                                    <i class="fa-solid fa-check me-1"></i>{{ label.name }}
+                                </button>
+                                {% else %}
+                                <input type="hidden" name="action" value="assign">
+                                <button type="submit" class="btn btn-sm btn-outline-light" style="min-width:7rem">
+                                    {{ label.name }}
+                                </button>
+                                {% endif %}
+                            </form>
+                            {% if label.description %}
+                            <span class="text-muted small">{{ label.description }}</span>
+                            {% endif %}
+                        </li>
+                        {% endwith %}
+                        {% endif %}
+                        {% endfor %}
+                    </ul>
+                    {% endfor %}
+
+                    {# Labels with no category #}
+                    {% if uncategorised_labels %}
+                    {% if label_categories %}
+                    <div class="px-3 pt-3 pb-1">
+                        <h6 class="text-muted text-uppercase small fw-semibold mb-0">{% trans "Other" %}</h6>
+                    </div>
+                    {% endif %}
+                    <ul class="list-group list-group-flush">
+                        {% for label in uncategorised_labels %}
+                        {% with assigned=label.pk|is_in:current_label_ids %}
+                        <li class="list-group-item d-flex align-items-center gap-3">
+                            <form method="post" action="{% url 'hr:self_assign_label' label.pk %}" class="flex-shrink-0">
+                                {% csrf_token %}
+                                {% if assigned %}
+                                <input type="hidden" name="action" value="remove">
+                                <button type="submit" class="btn btn-sm btn-success" style="min-width:7rem">
+                                    <i class="fa-solid fa-check me-1"></i>{{ label.name }}
+                                </button>
+                                {% else %}
+                                <input type="hidden" name="action" value="assign">
+                                <button type="submit" class="btn btn-sm btn-outline-light" style="min-width:7rem">
+                                    {{ label.name }}
+                                </button>
+                                {% endif %}
+                            </form>
+                            {% if label.description %}
+                            <span class="text-muted small">{{ label.description }}</span>
+                            {% endif %}
+                        </li>
+                        {% endwith %}
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+
+                    {% endif %}
+
+                </div>
+            </div>
+
+        </div>
+    </div>{# end rank+status / labels row #}
+
+    {# TeamSpeak #}
+    <div class="row g-3 mt-3">
+        <div class="col-lg-4">
+            {% include 'hr/partials/teamspeak_card.html' %}
+        </div>
+    </div>
+
+    {# Characters — full width #}
+    {% if characters %}
+    <div class="row g-3 mt-0">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header"><h6 class="mb-0">{% trans "Characters" %}</h6></div>
+                {% if has_audit_issue %}
+                <div class="card-body py-2 border-bottom border-warning">
+                    <p class="mb-0 small text-warning">
+                        <i class="fa-solid fa-triangle-exclamation me-1"></i>
+                        {% trans "One or more characters have a stale or missing ESI sync. Click the coloured button to open Corptools and refresh your ESI token." %}
+                    </p>
+                </div>
+                {% endif %}
+                <div class="card-body p-0">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th style="width:40px;"></th>
+                                <th>{% trans "Character" %}</th>
+                                <th>{% trans "Corporation" %}</th>
+                                <th class="text-center">{% trans "ESI Sync" %}</th>
+                                <th class="text-center" style="width:48px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for entry in characters %}
+                            <tr>
+                                <td>
+                                    <img src="{% eve_image 'character' entry.char.character_id 32 %}"
+                                         class="rounded" width="32" height="32" loading="lazy"
+                                         alt="{{ entry.char.character_name }}">
+                                </td>
+                                <td class="align-middle">
+                                    {{ entry.char.character_name }}
+                                    {% if entry.is_main %}
+                                    <span class="badge bg-secondary ms-1">{% trans "main" %}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="align-middle">
+                                    <img src="{% eve_image 'corporation' entry.char.corporation_id 32 %}"
+                                         class="rounded me-1" width="16" height="16" loading="lazy"
+                                         alt="{{ entry.char.corporation_name }}">
+                                    {{ entry.char.corporation_name }}
+                                </td>
+                                <td class="text-center align-middle">
+                                    {% if entry.audit_status == "ok" %}
+                                    <span class="badge bg-success"><i class="fa-solid fa-circle-check"></i> {% trans "OK" %}</span>
+                                    {% elif entry.audit_status == "stale" %}
+                                    <span class="badge bg-warning text-dark"><i class="fa-solid fa-triangle-exclamation"></i> {% trans "Stale" %}</span>
+                                    {% else %}
+                                    <span class="badge bg-danger"><i class="fa-solid fa-circle-xmark"></i> {% trans "Missing" %}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center align-middle">
+                                    <a href="{% url 'corptools:reactmain' entry.char.character_id %}"
+                                       class="btn btn-sm {% if entry.audit_status == 'ok' %}btn-outline-success{% elif entry.audit_status == 'stale' %}btn-outline-warning{% else %}btn-outline-danger{% endif %}"
+                                       target="_blank" rel="noopener noreferrer">
+                                        <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {# Recent Activity — full width #}
+    <div class="row g-3 mt-0">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header"><h6 class="mb-0">{% trans "Recent Activity" %}</h6></div>
+                <div class="card-body p-0">
+                    {% include 'hr/partials/audit_history.html' %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

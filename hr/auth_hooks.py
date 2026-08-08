@@ -29,3 +29,24 @@ class HrMenu(MenuItemHook):
 @hooks.register("menu_item_hook")
 def register_hr_menu():
     return HrMenu()
+
+
+class HrMemberMenu(MenuItemHook):
+    def __init__(self):
+        MenuItemHook.__init__(
+            self,
+            _("My HR"),
+            "fa-solid fa-user-tag",
+            "hr:me",
+            navactive=["hr:me"],
+        )
+
+    def render(self, request):
+        if request.user.has_perm("hr.member_access") and not request.user.has_perm("hr.access_hr"):
+            return MenuItemHook.render(self, request)
+        return ""
+
+
+@hooks.register("menu_item_hook")
+def register_hr_member_menu():
+    return HrMemberMenu()

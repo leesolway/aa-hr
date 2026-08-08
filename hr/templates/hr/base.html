@@ -5,6 +5,12 @@
 {% block header_nav_brand %}{% translate "HR" %}{% endblock header_nav_brand %}
 
 {% block header_nav_collapse_left %}
+{% if perms.hr.member_access %}
+<li class="nav-item">
+    <a class="nav-link" href="{% url 'hr:me' %}">{% translate "My Profile" %}</a>
+</li>
+{% endif %}
+{% if perms.hr.access_hr %}
 <li class="nav-item">
     <a class="nav-link" href="{% url 'hr:index' %}">{% translate "Dashboard" %}</a>
 </li>
@@ -16,10 +22,6 @@
 </li>
 <li class="nav-item">
     <a class="nav-link" href="{% url 'hr:audit' %}">{% translate "Audit Log" %}</a>
-</li>
-{% if perms.hr.manage_roles %}
-<li class="nav-item">
-    <a class="nav-link" href="{% url 'hr:roles' %}">{% translate "Roles" %}</a>
 </li>
 {% endif %}
 {% endblock header_nav_collapse_left %}

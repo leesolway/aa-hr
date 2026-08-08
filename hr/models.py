@@ -15,8 +15,11 @@ class HrConfiguration(SingletonModel):
     )
 
     class Meta:
+        verbose_name = "Configuration"
+        verbose_name_plural = "Configuration"
         permissions = [
             ("access_hr", "Can access the HR module"),
+            ("member_access", "Can access the member self-service dashboard"),
             ("manage_ranks", "Can create and edit rank definitions"),
             ("manage_roles", "Can assign roles to users"),
         ]
@@ -48,6 +51,8 @@ class Rank(models.Model):
 
     class Meta:
         ordering = ["priority"]
+        verbose_name = "Rank — Definition"
+        verbose_name_plural = "Rank — Definitions"
 
     def __str__(self):
         return self.name
@@ -73,6 +78,8 @@ class RankAssignment(models.Model):
 
     class Meta:
         ordering = ["-assigned_at"]
+        verbose_name = "Rank — Assignment"
+        verbose_name_plural = "Rank — Assignments"
         indexes = [
             models.Index(
                 fields=["user", "is_current"],
@@ -96,6 +103,8 @@ class Role(models.Model):
 
     class Meta:
         ordering = ["name"]
+        verbose_name = "Rank — Role"
+        verbose_name_plural = "Rank — Roles"
 
     def __str__(self):
         return self.name
@@ -119,59 +128,318 @@ class RoleAssignment(models.Model):
 
     class Meta:
         unique_together = [("user", "role")]
+        verbose_name = "Rank — Role Assignment"
+        verbose_name_plural = "Rank — Role Assignments"
 
     def __str__(self):
         return f"{self.user} — {self.role}"
 
 
-class RankAuditLog(models.Model):
-    ACTION_ASSIGNED = "assigned"
-    ACTION_REMOVED = "removed"
-    ACTION_CHANGED = "changed"
-    ACTION_CHOICES = [
-        (ACTION_ASSIGNED, "Assigned"),
-        (ACTION_REMOVED, "Removed"),
-        (ACTION_CHANGED, "Changed"),
-    ]
+class MemberStatus(models.Model):
+    """Defines a named status that can be applied to a member (e.g. Break, Away)."""
 
-    timestamp = models.DateTimeField(auto_now_add=True)
-    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    name = models.CharField(max_length=100, unique=True)
+    auth_group = models.OneToOneField(
+        Group,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="hr_member_status",
+        help_text="AA group to add the member to when this status is applied.",
+    )
+    removes_rank = models.BooleanField(
+        default=False,
+        help_text="Automatically remove the member's rank when this status is applied.",
+    )
+    member_assignable = models.BooleanField(
+        default=False,
+        help_text="Allow members to set and clear this status themselves via the member dashboard.",
+    )
+    description = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "Status — Definition"
+        verbose_name_plural = "Status — Definitions"
+
+    def __str__(self):
+        return self.name
+
+
+class MemberStatusAssignment(models.Model):
+    """Active status for a user. Absent means the user is normal/active."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="hr_member_status",
+    )
+    status = models.ForeignKey(
+        MemberStatus,
+        on_delete=models.PROTECT,
+        related_name="assignments",
+    )
+    set_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="hr_statuses_set",
+    )
+    set_at = models.DateTimeField(auto_now_add=True)
+    notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        verbose_name = "Status — Assignment"
+        verbose_name_plural = "Status — Assignments"
+
+    def __str__(self):
+        return f"{self.user} — {self.status}"
+
+
+class MemberStatusLog(models.Model):
+    """Immutable audit log for member status changes."""
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name="hr_audit_log_entries",
+        related_name="hr_status_log",
     )
+    old_status = models.ForeignKey(
+        MemberStatus,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    new_status = models.ForeignKey(
+        MemberStatus,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    set_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="hr_status_log_actions",
+    )
+    timestamp = models.DateTimeField(auto_now_add=True)
+    notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["-timestamp"]
+        verbose_name = "Status — Log Entry"
+        verbose_name_plural = "Status — Log"
+        indexes = [
+            models.Index(
+                fields=["user", "-timestamp"],
+                name="hr_statuslog_user_ts_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.user}: {self.old_status} → {self.new_status}"
+
+
+class LabelCategory(models.Model):
+    """Groups related MemberLabels together for display in the UI.
+
+    Examples: 'Timezone', 'Activity', 'Special'.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True, default="")
+    display_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["display_order", "name"]
+        verbose_name = "Label — Category"
+        verbose_name_plural = "Label — Categories"
+
+    def __str__(self):
+        return self.name
+
+
+class MemberLabel(models.Model):
+    """A non-exclusive tag that can be applied to members (e.g. Timezone-US, Gas).
+
+    Unlike MemberStatus, a user can hold multiple labels simultaneously.
+    Each label optionally links to an AA group — assignment adds the user to the
+    group, removal takes them out.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    category = models.ForeignKey(
+        LabelCategory,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="labels",
+        help_text="Groups this label with others of the same type in the UI.",
+    )
+    auth_group = models.OneToOneField(
+        Group,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="hr_member_label",
+        help_text="AA group linked to this label. Members are added/removed automatically.",
+    )
+    description = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    member_assignable = models.BooleanField(
+        default=False,
+        help_text="Allow members to assign and remove this label themselves via the member dashboard.",
+    )
+
+    class Meta:
+        ordering = ["category__display_order", "category__name", "name"]
+        verbose_name = "Label — Label"
+        verbose_name_plural = "Label — Labels"
+
+    def __str__(self):
+        return self.name
+
+
+class MemberLabelAssignment(models.Model):
+    """Active label on a user. Multiple per user are allowed."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="hr_label_assignments",
+    )
+    label = models.ForeignKey(
+        MemberLabel,
+        on_delete=models.CASCADE,
+        related_name="assignments",
+    )
+    assigned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="hr_labels_assigned",
+    )
+    assigned_at = models.DateTimeField(auto_now_add=True)
+    notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        unique_together = [("user", "label")]
+        ordering = ["label__name"]
+        verbose_name = "Label — Assignment"
+        verbose_name_plural = "Label — Assignments"
+
+    def __str__(self):
+        return f"{self.user} — {self.label}"
+
+
+class MemberLabelLog(models.Model):
+    """Immutable audit log for label assignments and removals."""
+
+    ACTION_ASSIGNED = "assigned"
+    ACTION_REMOVED = "removed"
+    ACTION_CHOICES = [
+        (ACTION_ASSIGNED, "Assigned"),
+        (ACTION_REMOVED, "Removed"),
+    ]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="hr_label_log",
+    )
+    label = models.ForeignKey(
+        MemberLabel,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="+",
+    )
+    action = models.CharField(max_length=10, choices=ACTION_CHOICES)
     performed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="hr_audit_actions",
+        related_name="hr_label_log_actions",
     )
-    old_rank = models.ForeignKey(
-        Rank,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
-    )
-    new_rank = models.ForeignKey(
-        Rank,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
-    )
+    timestamp = models.DateTimeField(auto_now_add=True)
     notes = models.TextField(blank=True, default="")
 
     class Meta:
         ordering = ["-timestamp"]
+        verbose_name = "Label — Log Entry"
+        verbose_name_plural = "Label — Log"
         indexes = [
             models.Index(
                 fields=["user", "-timestamp"],
-                name="hr_auditlog_user_ts_idx",
+                name="hr_labellog_user_ts_idx",
             ),
         ]
 
     def __str__(self):
-        return f"{self.get_action_display()} {self.user} at {self.timestamp}"
+        return f"{self.get_action_display()} {self.label} on {self.user}"
+
+
+class AuditLog(models.Model):
+    ACTION_RANK_ASSIGNED  = "rank_assigned"
+    ACTION_RANK_CHANGED   = "rank_changed"
+    ACTION_RANK_REMOVED   = "rank_removed"
+    ACTION_STATUS_SET     = "status_set"
+    ACTION_STATUS_CLEARED = "status_cleared"
+    ACTION_LABEL_ASSIGNED = "label_assigned"
+    ACTION_LABEL_REMOVED  = "label_removed"
+    ACTION_ROLES_CLEARED  = "roles_cleared"
+
+    ACTION_CHOICES = [
+        (ACTION_RANK_ASSIGNED,  "Rank assigned"),
+        (ACTION_RANK_CHANGED,   "Rank changed"),
+        (ACTION_RANK_REMOVED,   "Rank removed"),
+        (ACTION_STATUS_SET,     "Status set"),
+        (ACTION_STATUS_CLEARED, "Status cleared"),
+        (ACTION_LABEL_ASSIGNED, "Label assigned"),
+        (ACTION_LABEL_REMOVED,  "Label removed"),
+        (ACTION_ROLES_CLEARED,  "Roles cleared"),
+    ]
+
+    timestamp    = models.DateTimeField(auto_now_add=True)
+    action       = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    user         = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="hr_audit_log",
+    )
+    performed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="+",
+    )
+    notes = models.TextField(blank=True, default="")
+
+    # Rank fields — populated for rank_* actions
+    old_rank = models.ForeignKey(Rank, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    new_rank = models.ForeignKey(Rank, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+
+    # Status fields — populated for status_* actions
+    old_status = models.ForeignKey(
+        MemberStatus, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+    )
+    new_status = models.ForeignKey(
+        MemberStatus, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+    )
+
+    # Label field — populated for label_* actions
+    label = models.ForeignKey(
+        MemberLabel, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+    )
+
+    class Meta:
+        ordering = ["-timestamp"]
+        verbose_name = "Audit Log Entry"
+        verbose_name_plural = "Audit Log"
+        indexes = [
+            models.Index(fields=["user", "-timestamp"], name="hr_audit_user_ts_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.get_action_display()} — {self.user} at {self.timestamp}"

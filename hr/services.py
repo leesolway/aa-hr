@@ -3,7 +3,17 @@ from django.db import transaction
 
 from allianceauth.services.hooks import get_extension_logger
 
-from .models import Role, RoleAssignment, Rank, RankAssignment, RankAuditLog
+from .models import (
+    AuditLog,
+    MemberLabel,
+    MemberLabelAssignment,
+    MemberStatus,
+    MemberStatusAssignment,
+    Rank,
+    RankAssignment,
+    Role,
+    RoleAssignment,
+)
 
 logger = get_extension_logger(__name__)
 User = get_user_model()
@@ -76,8 +86,8 @@ def assign_rank(user, rank, assigned_by, notes=""):
         if rank.auth_group:
             user.groups.add(rank.auth_group)
 
-        action = RankAuditLog.ACTION_CHANGED if old_rank else RankAuditLog.ACTION_ASSIGNED
-        RankAuditLog.objects.create(
+        action = AuditLog.ACTION_RANK_CHANGED if old_rank else AuditLog.ACTION_RANK_ASSIGNED
+        AuditLog.objects.create(
             action=action,
             user=user,
             performed_by=assigned_by,
@@ -111,12 +121,147 @@ def remove_rank(user, performed_by, notes=""):
         if old_rank.auth_group:
             user.groups.remove(old_rank.auth_group)
 
-        RankAuditLog.objects.create(
-            action=RankAuditLog.ACTION_REMOVED,
+        AuditLog.objects.create(
+            action=AuditLog.ACTION_RANK_REMOVED,
             user=user,
             performed_by=performed_by,
             old_rank=old_rank,
-            new_rank=None,
+            notes=notes,
+        )
+
+    return True
+
+
+def set_member_status(user, status, set_by, notes=""):
+    """Apply a status to a user.
+
+    - Removes any existing status group from the user.
+    - Adds the new status group (if any).
+    - Removes rank atomically if status.removes_rank is True.
+    """
+    with transaction.atomic():
+        old_assignment = (
+            MemberStatusAssignment.objects.filter(user=user)
+            .select_related("status__auth_group")
+            .first()
+        )
+        old_status = old_assignment.status if old_assignment else None
+
+        if old_assignment:
+            if old_status.auth_group:
+                user.groups.remove(old_status.auth_group)
+            old_assignment.delete()
+
+        MemberStatusAssignment.objects.create(
+            user=user,
+            status=status,
+            set_by=set_by,
+            notes=notes,
+        )
+
+        if status.auth_group:
+            user.groups.add(status.auth_group)
+
+        AuditLog.objects.create(
+            action=AuditLog.ACTION_STATUS_SET,
+            user=user,
+            performed_by=set_by,
+            old_status=old_status,
+            new_status=status,
+            notes=notes,
+        )
+
+        if status.removes_rank:
+            remove_rank(
+                user,
+                performed_by=set_by,
+                notes=f"Rank removed: member status set to '{status}'",
+            )
+            removed_count, _ = RoleAssignment.objects.filter(user=user).delete()
+            if removed_count:
+                AuditLog.objects.create(
+                    action=AuditLog.ACTION_ROLES_CLEARED,
+                    user=user,
+                    performed_by=set_by,
+                    notes=f"{removed_count} role(s) cleared: member status set to '{status}'",
+                )
+
+
+def clear_member_status(user, set_by, notes=""):
+    """Clear the member's current status back to normal. Returns False if no status was set."""
+    with transaction.atomic():
+        assignment = (
+            MemberStatusAssignment.objects.filter(user=user)
+            .select_related("status__auth_group")
+            .first()
+        )
+        if not assignment:
+            return False
+
+        old_status = assignment.status
+        if old_status.auth_group:
+            user.groups.remove(old_status.auth_group)
+        assignment.delete()
+
+        AuditLog.objects.create(
+            action=AuditLog.ACTION_STATUS_CLEARED,
+            user=user,
+            performed_by=set_by,
+            old_status=old_status,
+            notes=notes,
+        )
+
+    return True
+
+
+def assign_label(user, label, assigned_by, notes=""):
+    """Assign a label to a user and add them to the label's AA group (if any).
+
+    Returns the MemberLabelAssignment, or the existing one if already assigned.
+    """
+    with transaction.atomic():
+        assignment, created = MemberLabelAssignment.objects.get_or_create(
+            user=user,
+            label=label,
+            defaults={"assigned_by": assigned_by, "notes": notes},
+        )
+        if not created:
+            return assignment
+
+        if label.auth_group:
+            user.groups.add(label.auth_group)
+
+        AuditLog.objects.create(
+            action=AuditLog.ACTION_LABEL_ASSIGNED,
+            user=user,
+            performed_by=assigned_by,
+            label=label,
+            notes=notes,
+        )
+
+    return assignment
+
+
+def remove_label(user, label, performed_by, notes=""):
+    """Remove a label from a user and remove them from the label's AA group (if any).
+
+    Returns True if removed, False if the user did not have the label.
+    """
+    with transaction.atomic():
+        deleted, _ = MemberLabelAssignment.objects.filter(
+            user=user, label=label
+        ).delete()
+        if not deleted:
+            return False
+
+        if label.auth_group:
+            user.groups.remove(label.auth_group)
+
+        AuditLog.objects.create(
+            action=AuditLog.ACTION_LABEL_REMOVED,
+            user=user,
+            performed_by=performed_by,
+            label=label,
             notes=notes,
         )
 
@@ -149,10 +294,11 @@ def prepare_members(config):
 
     users = (
         User.objects.filter(profile__state=config.aa_state)
-        .select_related("profile__main_character")
+        .select_related("profile__main_character", "hr_member_status__status")
         .prefetch_related(
             "character_ownerships__character__characteraudit__characterroles__titles",
             "hr_rank_assignments__rank",
+            "hr_label_assignments__label",
         )
     )
 
@@ -197,6 +343,18 @@ def prepare_members(config):
                 if expected is not None:
                     missing_title_chars.append(char)
 
+        try:
+            member_status = user.hr_member_status
+        except Exception:
+            member_status = None
+
+        on_status = member_status.status if member_status else None
+        is_on_break = bool(on_status and on_status.removes_rank)
+        # Suppress title mismatch warnings for members on any status — not actionable
+        title_mismatch = bool(missing_title_chars) and not on_status
+
+        labels = [a.label for a in user.hr_label_assignments.all()]
+
         members.append(
             {
                 "user": user,
@@ -204,10 +362,13 @@ def prepare_members(config):
                 "alts": alts,
                 "alt_count": len(alts),
                 "rank": rank,
-                "title_mismatch": bool(missing_title_chars),
+                "title_mismatch": title_mismatch,
                 "missing_title_chars": missing_title_chars,
                 "audit_issue_chars": audit_issue_chars,
                 "has_audit_issue": bool(audit_issue_chars),
+                "member_status": member_status,
+                "is_on_break": is_on_break,
+                "labels": labels,
             }
         )
 

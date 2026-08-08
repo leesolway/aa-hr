@@ -87,6 +87,11 @@
                                 {% else %}
                                 <span class="text-muted">—</span>
                                 {% endif %}
+                                {% if member.member_status %}
+                                <span class="badge bg-warning text-dark ms-1">
+                                    <i class="fa-solid fa-clock"></i> {{ member.member_status.status.name }}
+                                </span>
+                                {% endif %}
                             </td>
                             <td class="text-center">
                                 {% if member.alt_count > 0 %}

@@ -1,0 +1,106 @@
+{% load i18n %}
+<div class="table-responsive">
+    <table class="table table-sm table-striped mb-0">
+        <thead class="table-dark">
+            <tr>
+                <th>{% trans "Date" %}</th>
+                <th>{% trans "Action" %}</th>
+                <th>{% trans "Detail" %}</th>
+                <th>{% trans "Performed by" %}</th>
+                <th>{% trans "Notes" %}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in audit_page %}
+            <tr>
+                <td><small class="text-muted">{{ entry.timestamp|date:"Y-m-d H:i" }}</small></td>
+                <td>
+                    {% if entry.action == 'rank_assigned' %}
+                    <span class="badge bg-success">{% trans "Rank assigned" %}</span>
+                    {% elif entry.action == 'rank_changed' %}
+                    <span class="badge bg-info">{% trans "Rank changed" %}</span>
+                    {% elif entry.action == 'rank_removed' %}
+                    <span class="badge bg-danger">{% trans "Rank removed" %}</span>
+                    {% elif entry.action == 'status_set' %}
+                    <span class="badge bg-warning text-dark">{% trans "Status set" %}</span>
+                    {% elif entry.action == 'status_cleared' %}
+                    <span class="badge bg-secondary">{% trans "Status cleared" %}</span>
+                    {% elif entry.action == 'label_assigned' %}
+                    <span class="badge bg-primary">{% trans "Label assigned" %}</span>
+                    {% elif entry.action == 'label_removed' %}
+                    <span class="badge bg-secondary">{% trans "Label removed" %}</span>
+                    {% elif entry.action == 'roles_cleared' %}
+                    <span class="badge bg-danger">{% trans "Roles cleared" %}</span>
+                    {% else %}
+                    <span class="badge bg-secondary">{{ entry.action }}</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if entry.action == 'rank_assigned' %}
+                    <span class="badge bg-info">{{ entry.new_rank.name }}</span>
+                    {% elif entry.action == 'rank_changed' %}
+                    <span class="badge bg-secondary">{{ entry.old_rank.name }}</span>
+                    <i class="fa-solid fa-arrow-right mx-1 text-muted small"></i>
+                    <span class="badge bg-info">{{ entry.new_rank.name }}</span>
+                    {% elif entry.action == 'rank_removed' %}
+                    <span class="badge bg-secondary">{{ entry.old_rank.name }}</span>
+                    {% elif entry.action == 'status_set' %}
+                    {% if entry.old_status %}
+                    <span class="badge bg-secondary">{{ entry.old_status.name }}</span>
+                    <i class="fa-solid fa-arrow-right mx-1 text-muted small"></i>
+                    {% endif %}
+                    <span class="badge bg-warning text-dark">{{ entry.new_status.name }}</span>
+                    {% elif entry.action == 'status_cleared' %}
+                    <span class="badge bg-secondary">{{ entry.old_status.name }}</span>
+                    {% elif entry.action == 'label_assigned' or entry.action == 'label_removed' %}
+                    {% if entry.label %}<span class="badge bg-light text-dark border">{{ entry.label.name }}</span>{% endif %}
+                    {% else %}
+                    <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if entry.performed_by %}
+                    {% if entry.performed_by.profile.main_character %}
+                    {{ entry.performed_by.profile.main_character.character_name }}
+                    {% else %}
+                    {{ entry.performed_by }}
+                    {% endif %}
+                    {% else %}
+                    <span class="text-muted">{% trans "System" %}</span>
+                    {% endif %}
+                </td>
+                <td><small class="text-muted">{{ entry.notes|default:"—" }}</small></td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5" class="text-center text-muted py-3">{% trans "No audit history." %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% if audit_page.paginator.num_pages > 1 %}
+<div class="d-flex justify-content-between align-items-center p-3">
+    <small class="text-muted">
+        {% trans "Page" %} {{ audit_page.number }} {% trans "of" %} {{ audit_page.paginator.num_pages }}
+    </small>
+    <nav>
+        <ul class="pagination pagination-sm mb-0">
+            {% if audit_page.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?audit_page={{ audit_page.previous_page_number }}">&laquo;</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
+            {% endif %}
+            {% if audit_page.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?audit_page={{ audit_page.next_page_number }}">&raquo;</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
+            {% endif %}
+        </ul>
+    </nav>
+</div>
+{% endif %}

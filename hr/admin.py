@@ -4,14 +4,18 @@ from django.contrib.auth import get_user_model
 from corptools.models import CharacterTitle
 
 from .models import (
+    AuditLog,
     HrConfiguration,
+    LabelCategory,
+    MemberLabel,
+    MemberLabelAssignment,
+    MemberStatus,
     Rank,
     RankAssignment,
-    RankAuditLog,
     Role,
     RoleAssignment,
 )
-from .services import assign_rank
+from .services import assign_label, assign_rank, remove_label
 
 User = get_user_model()
 
@@ -77,6 +81,106 @@ class HrConfigurationAdmin(admin.ModelAdmin):
         )
 
 
+@admin.register(AuditLog)
+class AuditLogAdmin(admin.ModelAdmin):
+    list_display = ["timestamp", "action", "user", "performed_by", "notes"]
+    list_filter = ["action"]
+    search_fields = ["user__profile__main_character__character_name"]
+    readonly_fields = [
+        "timestamp", "action", "user", "performed_by", "notes",
+        "old_rank", "new_rank", "old_status", "new_status", "label",
+    ]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(MemberStatus)
+class MemberStatusAdmin(admin.ModelAdmin):
+    list_display = ["name", "auth_group", "removes_rank", "description"]
+    list_editable = ["removes_rank"]
+
+
+@admin.register(LabelCategory)
+class LabelCategoryAdmin(admin.ModelAdmin):
+    list_display = ["name", "display_order", "description"]
+    list_editable = ["display_order"]
+    ordering = ["display_order", "name"]
+
+
+@admin.register(MemberLabel)
+class MemberLabelAdmin(admin.ModelAdmin):
+    list_display = ["name", "category", "auth_group", "is_active", "member_assignable", "description"]
+    list_editable = ["is_active", "member_assignable"]
+    list_filter = ["category", "is_active", "member_assignable"]
+    search_fields = ["name", "description"]
+    actions = ["sync_from_group"]
+
+    @admin.action(description="Sync label assignments from AA group membership")
+    def sync_from_group(self, request, queryset):
+        User = get_user_model()
+        total_added = 0
+        total_removed = 0
+        skipped = 0
+
+        for label in queryset.select_related("auth_group").prefetch_related("assignments"):
+            if not label.auth_group:
+                skipped += 1
+                continue
+
+            group_user_ids = set(
+                label.auth_group.user_set.values_list("pk", flat=True)
+            )
+            assigned_user_ids = set(
+                label.assignments.values_list("user_id", flat=True)
+            )
+
+            # Add label for users in the group that lack an assignment
+            for user in User.objects.filter(pk__in=group_user_ids - assigned_user_ids):
+                assign_label(
+                    user, label,
+                    assigned_by=request.user,
+                    notes="Retroactive sync from group membership",
+                )
+                total_added += 1
+
+            # Remove label for users with an assignment no longer in the group
+            orphaned = label.assignments.filter(
+                user_id__in=assigned_user_ids - group_user_ids
+            ).select_related("user")
+            for assignment in orphaned:
+                remove_label(
+                    assignment.user, label,
+                    performed_by=request.user,
+                    notes="Sync cleanup: user not in group",
+                )
+                total_removed += 1
+
+        parts = []
+        if total_added:
+            parts.append(f"{total_added} assignment(s) added")
+        if total_removed:
+            parts.append(f"{total_removed} orphaned assignment(s) removed")
+        if skipped:
+            parts.append(f"{skipped} label(s) skipped (no group linked)")
+
+        self.message_user(
+            request,
+            "Sync complete: " + ", ".join(parts) + "." if parts else "Nothing to sync.",
+        )
+
+
+@admin.register(MemberLabelAssignment)
+class MemberLabelAssignmentAdmin(admin.ModelAdmin):
+    list_display = ["user", "label", "assigned_by", "assigned_at"]
+    list_filter = ["label"]
+    search_fields = ["user__profile__main_character__character_name"]
+    readonly_fields = ["assigned_at"]
+
+
 @admin.register(Rank)
 class RankAdmin(admin.ModelAdmin):
     list_display = ["name", "priority", "auth_group", "corp_title", "is_active"]
@@ -120,15 +224,3 @@ class RoleAssignmentAdmin(admin.ModelAdmin):
     readonly_fields = ["assigned_at"]
 
 
-@admin.register(RankAuditLog)
-class RankAuditLogAdmin(admin.ModelAdmin):
-    list_display = ["timestamp", "action", "user", "old_rank", "new_rank", "performed_by"]
-    list_filter = ["action", "new_rank"]
-    search_fields = ["user__profile__main_character__character_name"]
-    readonly_fields = ["timestamp"]
-
-    def has_add_permission(self, request):
-        return False
-
-    def has_change_permission(self, request, obj=None):
-        return False
