@@ -286,7 +286,7 @@
                                     {% endif %}
                                 </td>
                                 <td class="text-center align-middle">
-                                    <a href="{% url 'corptools:reactmain' entry.char.character_id %}"
+                                    <a href="{% url 'corptools:reactmain' entry.char.character_id %}account/status"
                                        class="btn btn-sm {% if entry.audit_status == 'ok' %}btn-outline-success{% elif entry.audit_status == 'stale' %}btn-outline-warning{% else %}btn-outline-danger{% endif %}"
                                        target="_blank" rel="noopener noreferrer">
                                         <i class="fa-solid fa-arrow-up-right-from-square"></i>

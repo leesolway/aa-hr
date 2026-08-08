@@ -28,28 +28,23 @@ def get_current_rank(user):
     )
 
 
+def _get_rank_ids_for_user_roles(user, field):
+    """Return set of Rank PKs reachable via the user's roles for the given M2M field."""
+    role_ids = RoleAssignment.objects.filter(user=user).values_list("role_id", flat=True)
+    ids = set(Role.objects.filter(pk__in=role_ids).values_list(field, flat=True))
+    ids.discard(None)
+    return ids
+
+
 def get_effective_assignable_ranks(user):
     """Return queryset of Ranks this user may assign via their roles."""
-    role_ids = RoleAssignment.objects.filter(user=user).values_list(
-        "role_id", flat=True
-    )
-    rank_ids = set(
-        Role.objects.filter(pk__in=role_ids).values_list("can_assign", flat=True)
-    )
-    rank_ids.discard(None)
+    rank_ids = _get_rank_ids_for_user_roles(user, "can_assign")
     return Rank.objects.filter(pk__in=rank_ids, is_active=True).order_by("priority")
 
 
 def get_effective_removable_rank_ids(user):
     """Return set of Rank PKs this user may remove via their roles."""
-    role_ids = RoleAssignment.objects.filter(user=user).values_list(
-        "role_id", flat=True
-    )
-    ids = set(
-        Role.objects.filter(pk__in=role_ids).values_list("can_remove", flat=True)
-    )
-    ids.discard(None)
-    return ids
+    return _get_rank_ids_for_user_roles(user, "can_remove")
 
 
 def assign_rank(user, rank, assigned_by, notes=""):
@@ -294,6 +289,40 @@ def characters_missing_title(user, rank):
     return missing
 
 
+def get_stale_title_chars(user, home_corp_id=None):
+    """Return characters that still hold the user's previous rank title in-game.
+
+    Relevant when a rank has been removed via a removes_rank status. Supports
+    prefetched character_ownerships and hr_rank_assignments — no extra queries
+    if the caller has prefetched those relations.
+    home_corp_id: when set, only characters in that corporation are checked.
+    Returns [] if there is no previous rank with a corp_title configured.
+    """
+    prev_assignment = next(
+        (a for a in user.hr_rank_assignments.all() if not a.is_current), None
+    )
+    if not prev_assignment or not prev_assignment.rank.corp_title_id:
+        return []
+    prev_corp_id = prev_assignment.rank.corp_title.corporation_id
+    prev_title = prev_assignment.rank.corp_title.title
+    stale = []
+    for ownership in user.character_ownerships.all():
+        char = ownership.character
+        if not char:
+            continue
+        if home_corp_id and char.corporation_id != home_corp_id:
+            continue
+        if char.corporation_id != prev_corp_id:
+            continue
+        try:
+            titles = {t.title for t in char.characteraudit.characterroles.titles.all()}
+            if prev_title in titles:
+                stale.append(char)
+        except AttributeError:
+            pass
+    return stale
+
+
 def prepare_members(config):
     """Return list of member dicts for all users in config.aa_state.
 
@@ -311,7 +340,7 @@ def prepare_members(config):
         .select_related("profile__main_character", "hr_member_status__status")
         .prefetch_related(
             "character_ownerships__character__characteraudit__characterroles__titles",
-            "hr_rank_assignments__rank",
+            "hr_rank_assignments__rank__corp_title",
             "hr_label_assignments__label",
         )
     )
@@ -371,9 +400,12 @@ def prepare_members(config):
             member_status = None
 
         on_status = member_status.status if member_status else None
-        is_on_break = bool(on_status and on_status.removes_rank)
-        # Suppress title mismatch warnings for members on any status — not actionable
+        rank_removed_by_status = bool(on_status and on_status.removes_rank)
+        # Suppress title mismatch warnings for members on any active status — not actionable
         title_mismatch = bool(missing_title_chars) and not on_status
+
+        # If rank was removed by a status, check if the member still has their previous title in-game
+        stale_title_chars = get_stale_title_chars(user, home_corp_id=home_corp_id) if rank_removed_by_status else []
 
         labels = [a.label for a in user.hr_label_assignments.all()]
 
@@ -386,10 +418,11 @@ def prepare_members(config):
                 "rank": rank,
                 "title_mismatch": title_mismatch,
                 "missing_title_chars": missing_title_chars,
+                "stale_title_chars": stale_title_chars,
                 "audit_issue_chars": audit_issue_chars,
                 "has_audit_issue": bool(audit_issue_chars),
                 "member_status": member_status,
-                "is_on_break": is_on_break,
+                "rank_removed_by_status": rank_removed_by_status,
                 "labels": labels,
             }
         )

@@ -151,7 +151,7 @@ Prefetch pattern for member list:
 - Status is exclusive (one per user). Absence of a `MemberStatusAssignment` = normal/active.
 - Labels are non-exclusive (many per user). `MemberLabel.member_assignable` allows self-service via `/hr/me/`.
 - **Group sync signal** in `signals.py` (`sync_group_removal`): AA group removals triggered externally auto-clean matching `MemberLabelAssignment` and `MemberStatusAssignment`.
-- **Title mismatch suppression**: `prepare_members` sets `title_mismatch=False` for any member on an active status (not actionable). `is_on_break=True` when `status.removes_rank=True` — dashboard excludes these from `no_rank` count and `issue_members`.
+- **Title mismatch suppression**: `prepare_members` sets `title_mismatch=False` for any member on an active status (not actionable). `rank_removed_by_status=True` when `status.removes_rank=True` — dashboard excludes these from `no_rank` count and `issue_members`.
 
 ## Codex Replacement Status
 

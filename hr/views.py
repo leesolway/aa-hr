@@ -17,6 +17,7 @@ from .services import (
     get_current_rank,
     get_effective_assignable_ranks,
     get_effective_removable_rank_ids,
+    get_stale_title_chars,
     prepare_members,
     remove_label,
     remove_rank,
@@ -28,6 +29,15 @@ User = get_user_model()
 
 def _has_any_role(user):
     return user.role_assignments.exists()
+
+
+def _unregistered_chars_qs(state):
+    """Queryset of EveCharacters in the given state that have no registered owner."""
+    corp_ids = list(state.member_corporations.values_list("corporation_id", flat=True))
+    alliance_ids = list(state.member_alliances.values_list("alliance_id", flat=True))
+    return EveCharacter.objects.filter(
+        Q(corporation_id__in=corp_ids) | Q(alliance_id__in=alliance_ids)
+    ).filter(character_ownership__isnull=True)
 
 
 # ---------------------------------------------------------------------------
@@ -46,30 +56,19 @@ def dashboard(request):
 
     total = len(members)
     # Exclude Break members from no_rank — their rank was intentionally removed
-    no_rank = sum(1 for m in members if not m["rank"] and not m["is_on_break"])
+    no_rank = sum(1 for m in members if not m["rank"] and not m["rank_removed_by_status"])
     mismatches = sum(1 for m in members if m["title_mismatch"])
     audit_issues = sum(1 for m in members if m["has_audit_issue"])
 
     issue_members = [
         m for m in members
         if m["title_mismatch"]
-        or (not m["rank"] and not m["is_on_break"])
+        or m["stale_title_chars"]
+        or (not m["rank"] and not m["rank_removed_by_status"])
         or m["has_audit_issue"]
     ]
 
-    corp_ids = list(
-        config.aa_state.member_corporations.values_list("corporation_id", flat=True)
-    )
-    alliance_ids = list(
-        config.aa_state.member_alliances.values_list("alliance_id", flat=True)
-    )
-    unregistered_count = (
-        EveCharacter.objects.filter(
-            Q(corporation_id__in=corp_ids) | Q(alliance_id__in=alliance_ids)
-        )
-        .filter(character_ownership__isnull=True)
-        .count()
-    )
+    unregistered_count = _unregistered_chars_qs(config.aa_state).count()
 
     return render(request, "hr/dashboard.html", {
         "state": config.aa_state,
@@ -174,6 +173,7 @@ def member_detail(request, user_id):
         assignable_ranks = Rank.objects.filter(is_active=True)
 
     missing_title_chars = []
+    stale_title_chars = []
     if current_rank:
         missing_title_chars = characters_missing_title(member_user, current_rank)
 
@@ -208,6 +208,10 @@ def member_detail(request, user_id):
     except Exception:
         current_status_assignment = None
 
+    # If rank was removed by a status, check if the member still has their previous title in-game
+    rank_removed_by_status = bool(current_status_assignment and current_status_assignment.status.removes_rank and not current_rank)
+    stale_title_chars = get_stale_title_chars(member_user) if rank_removed_by_status else []
+
     all_statuses = MemberStatus.objects.all()
 
     current_label_ids = {a.label_id for a in member_user.hr_label_assignments.all()}
@@ -241,6 +245,7 @@ def member_detail(request, user_id):
         "current_rank": current_rank,
         "current_assignment": current_assignment,
         "missing_title_chars": missing_title_chars,
+        "stale_title_chars": stale_title_chars,
         "assignable_ranks": assignable_ranks,
         "can_assign": can_assign,
         "can_remove": can_remove,
@@ -571,20 +576,7 @@ def unregistered(request):
     if not config.aa_state:
         return render(request, "hr/unregistered.html", {"characters": [], "state": None})
 
-    corp_ids = list(
-        config.aa_state.member_corporations.values_list("corporation_id", flat=True)
-    )
-    alliance_ids = list(
-        config.aa_state.member_alliances.values_list("alliance_id", flat=True)
-    )
-
-    characters = (
-        EveCharacter.objects.filter(
-            Q(corporation_id__in=corp_ids) | Q(alliance_id__in=alliance_ids)
-        )
-        .filter(character_ownership__isnull=True)
-        .order_by("corporation_name", "character_name")
-    )
+    characters = _unregistered_chars_qs(config.aa_state).order_by("corporation_name", "character_name")
 
     search = request.GET.get("search", "").strip()
     if search:

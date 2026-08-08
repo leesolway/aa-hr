@@ -84,6 +84,10 @@
                                 <i class="fa-solid fa-triangle-exclamation text-warning ms-1"
                                    title="{% trans 'EVE titles out of sync' %}"></i>
                                 {% endif %}
+                                {% if member.stale_title_chars %}
+                                <i class="fa-solid fa-triangle-exclamation text-warning ms-1"
+                                   title="{% trans 'In-game title not yet removed' %}"></i>
+                                {% endif %}
                                 {% else %}
                                 <span class="text-muted">—</span>
                                 {% endif %}

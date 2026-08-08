@@ -44,6 +44,9 @@
                         <a href="{{ evewho }}" target="_blank" rel="noopener noreferrer">
                             <i class="fa-solid fa-address-card"></i> Eve-Who
                         </a>
+                        <a href="{% url 'corptools:reactmain' main.character_id %}" target="_blank" rel="noopener noreferrer" class="ms-3">
+                            <i class="fa-solid fa-magnifying-glass"></i> Audit
+                        </a>
                     </div>
                     {% endif %}
                 </div>
@@ -295,6 +298,31 @@
         </div>
         {% endif %}
 
+        {% if stale_title_chars %}
+        <div class="col-lg-4 mb-3">
+            <div class="card border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0">
+                        <i class="fa-solid fa-triangle-exclamation"></i> {% trans "In-Game Title Not Removed" %}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="mb-2 text-warning">{% trans "Member is on break but still has their EVE title. Remove it in-game:" %}</p>
+                    <ul class="list-unstyled mb-0">
+                        {% for char in stale_title_chars %}
+                        <li>
+                            <img src="{% eve_image 'character' char.character_id 32 %}"
+                                 class="rounded me-1" width="20" height="20" loading="lazy"
+                                 alt="{{ char.character_name }}">
+                            {{ char.character_name }}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         {% if audit_issue_chars %}
         <div class="col-lg-4 mb-3">
             <div class="card border-danger">
@@ -376,6 +404,9 @@
                                 {% evewho_url alt.character_id as evewho %}
                                 <a href="{{ evewho }}" target="_blank" rel="noopener noreferrer" class="ms-2">
                                     <i class="fa-solid fa-address-card"></i>
+                                </a>
+                                <a href="{% url 'corptools:reactmain' alt.character_id %}" target="_blank" rel="noopener noreferrer" class="ms-2">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
                                 </a>
                             </td>
                         </tr>

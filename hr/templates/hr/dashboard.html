@@ -118,6 +118,11 @@
                                     <i class="fa-solid fa-triangle-exclamation"></i> {% trans "Title mismatch" %}
                                 </span>
                                 {% endif %}
+                                {% if member.stale_title_chars %}
+                                <span class="badge bg-warning text-dark">
+                                    <i class="fa-solid fa-triangle-exclamation"></i> {% trans "Title not removed" %}
+                                </span>
+                                {% endif %}
                                 {% if member.has_audit_issue %}
                                 <span class="badge bg-danger">
                                     <i class="fa-solid fa-database"></i> {% trans "Audit issue" %}
