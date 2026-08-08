@@ -269,14 +269,21 @@ def remove_label(user, label, performed_by, notes=""):
 
 
 def characters_missing_title(user, rank):
-    """Return list of EveCharacter objects that do not have rank.corp_title."""
+    """Return list of EveCharacter objects that do not have rank.corp_title.
+
+    Only checks characters that belong to rank.corp_title.corporation_id —
+    alts in other corporations are excluded.
+    """
     if not rank.corp_title:
         return []
     expected = rank.corp_title.title
+    corp_id = rank.corp_title.corporation_id
     missing = []
     for ownership in user.character_ownerships.all():
         char = ownership.character
         if not char:
+            continue
+        if char.corporation_id != corp_id:
             continue
         try:
             titles = {t.title for t in char.characteraudit.characterroles.titles.all()}
@@ -288,9 +295,16 @@ def characters_missing_title(user, rank):
 
 
 def prepare_members(config):
-    """Return list of member dicts for all users in config.aa_state."""
+    """Return list of member dicts for all users in config.aa_state.
+
+    If config.home_corp is set, only users whose main character is in that
+    corporation are included, and character-level checks (title, audit) are
+    restricted to that corporation's characters.
+    """
     if not config.aa_state:
         return []
+
+    home_corp_id = config.home_corp.corporation_id if config.home_corp_id else None
 
     users = (
         User.objects.filter(profile__state=config.aa_state)
@@ -301,6 +315,9 @@ def prepare_members(config):
             "hr_label_assignments__label",
         )
     )
+
+    if home_corp_id:
+        users = users.filter(profile__main_character__corporation_id=home_corp_id)
 
     members = []
     for user in users:
@@ -324,23 +341,28 @@ def prepare_members(config):
 
         missing_title_chars = []
         audit_issue_chars = []
-        expected = rank.corp_title.title if (rank and rank.corp_title) else None
+        title_corp_id = rank.corp_title.corporation_id if (rank and rank.corp_title) else None
+        expected = rank.corp_title.title if title_corp_id else None
 
         for ownership in user.character_ownerships.all():
             char = ownership.character
             if not char:
                 continue
+            # When home_corp is configured, only check that corp's characters
+            if home_corp_id and char.corporation_id != home_corp_id:
+                continue
             try:
                 audit = char.characteraudit
                 if not audit.active:
                     audit_issue_chars.append(char)
-                if expected is not None:
+                # Only check title on characters in the title's corporation
+                if expected is not None and char.corporation_id == title_corp_id:
                     titles = {t.title for t in audit.characterroles.titles.all()}
                     if expected not in titles:
                         missing_title_chars.append(char)
             except AttributeError:
                 audit_issue_chars.append(char)
-                if expected is not None:
+                if expected is not None and char.corporation_id == title_corp_id:
                     missing_title_chars.append(char)
 
         try:

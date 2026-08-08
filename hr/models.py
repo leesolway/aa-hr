@@ -13,6 +13,17 @@ class HrConfiguration(SingletonModel):
         blank=True,
         help_text="Only members in this state are shown in the HR module.",
     )
+    home_corp = models.ForeignKey(
+        "eveonline.EveCorporationInfo",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Restrict member list and title checks to this corporation. "
+            "Leave blank to include all members in the configured state."
+        ),
+    )
 
     class Meta:
         verbose_name = "Configuration"

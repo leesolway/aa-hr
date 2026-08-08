@@ -31,6 +31,8 @@ class HrConfigurationAdmin(admin.ModelAdmin):
             self.message_user(request, "No state configured in HR Configuration.", level="error")
             return
 
+        home_corp_id = config.home_corp.corporation_id if config.home_corp_id else None
+
         users = (
             User.objects.filter(profile__state=config.aa_state)
             .prefetch_related(
@@ -38,6 +40,8 @@ class HrConfigurationAdmin(admin.ModelAdmin):
                 "hr_rank_assignments",
             )
         )
+        if home_corp_id:
+            users = users.filter(profile__main_character__corporation_id=home_corp_id)
 
         assigned = 0
         skipped = 0
@@ -52,6 +56,8 @@ class HrConfigurationAdmin(admin.ModelAdmin):
             for ownership in user.character_ownerships.all():
                 char = ownership.character
                 if not char:
+                    continue
+                if home_corp_id and char.corporation_id != home_corp_id:
                     continue
                 try:
                     for t in char.characteraudit.characterroles.titles.all():
@@ -190,7 +196,14 @@ class RankAdmin(admin.ModelAdmin):
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "corp_title":
             config = HrConfiguration.get_solo()
-            if config.aa_state:
+            if config.home_corp:
+                kwargs["queryset"] = (
+                    CharacterTitle.objects.filter(
+                        corporation_id=config.home_corp.corporation_id
+                    )
+                    .order_by("title")
+                )
+            elif config.aa_state:
                 kwargs["queryset"] = (
                     CharacterTitle.objects.filter(
                         characterroles__character__character__character_ownership__user__profile__state=config.aa_state

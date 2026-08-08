@@ -44,7 +44,7 @@ Menu item visibility is controlled by checking permissions in
 
 | Model | Purpose |
 |---|---|
-| `HrConfiguration` | Singleton (django-solo). Holds `aa_state` FK to `allianceauth.authentication.State`. |
+| `HrConfiguration` | Singleton (django-solo). Holds `aa_state` FK to `allianceauth.authentication.State`. Optional `home_corp` FK to `EveCorporationInfo` — when set, restricts member list to that corp's mains and scopes all character checks to that corp. |
 | `Rank` | Definition: name, priority, `auth_group` (1:1 Group), `corp_title` (FK → `corptools.CharacterTitle`), `is_active` |
 | `RankAssignment` | Per-user rank record. `is_current=True` = active rank. History kept by setting `is_current=False`. |
 | `Role` | RBAC role for HR operators. `can_assign`/`can_remove` M2M → Rank |
