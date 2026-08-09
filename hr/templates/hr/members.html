@@ -93,7 +93,7 @@
                                 {% endif %}
                                 {% if member.member_status %}
                                 <span class="badge bg-warning text-dark ms-1">
-                                    <i class="fa-solid fa-clock"></i> {{ member.member_status.status.name }}
+                                    <i class="fa-solid fa-clock"></i> {{ member.member_status.get_status_display }}
                                 </span>
                                 {% endif %}
                             </td>

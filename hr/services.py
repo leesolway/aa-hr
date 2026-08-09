@@ -5,9 +5,9 @@ from allianceauth.services.hooks import get_extension_logger
 
 from .models import (
     AuditLog,
+    HrConfiguration,
     MemberLabel,
     MemberLabelAssignment,
-    MemberStatus,
     MemberStatusAssignment,
     Rank,
     RankAssignment,
@@ -127,24 +127,32 @@ def remove_rank(user, performed_by, notes=""):
     return True
 
 
-def set_member_status(user, status, set_by, notes=""):
-    """Apply a status to a user.
+def _status_auth_group(config, status):
+    """Return the AA Group for the given status string, or None."""
+    if status == MemberStatusAssignment.BREAK:
+        return config.break_auth_group
+    if status == MemberStatusAssignment.AWAY:
+        return config.away_auth_group
+    return None
 
-    - Removes any existing status group from the user.
-    - Adds the new status group (if any).
-    - Removes rank atomically if status.removes_rank is True.
+
+def set_member_status(user, status, set_by, notes=""):
+    """Apply a status ('away' or 'break') to a user.
+
+    - Swaps AA group membership.
+    - Removes rank and clears roles atomically when status is Break.
     """
+    config = HrConfiguration.get_solo()
+    new_group = _status_auth_group(config, status)
+
     with transaction.atomic():
-        old_assignment = (
-            MemberStatusAssignment.objects.filter(user=user)
-            .select_related("status__auth_group")
-            .first()
-        )
-        old_status = old_assignment.status if old_assignment else None
+        old_assignment = MemberStatusAssignment.objects.filter(user=user).first()
+        old_status = old_assignment.status if old_assignment else ""
 
         if old_assignment:
-            if old_status.auth_group:
-                user.groups.remove(old_status.auth_group)
+            old_group = _status_auth_group(config, old_status)
+            if old_group:
+                user.groups.remove(old_group)
             old_assignment.delete()
 
         MemberStatusAssignment.objects.create(
@@ -154,8 +162,8 @@ def set_member_status(user, status, set_by, notes=""):
             notes=notes,
         )
 
-        if status.auth_group:
-            user.groups.add(status.auth_group)
+        if new_group:
+            user.groups.add(new_group)
 
         AuditLog.objects.create(
             action=AuditLog.ACTION_STATUS_SET,
@@ -166,11 +174,11 @@ def set_member_status(user, status, set_by, notes=""):
             notes=notes,
         )
 
-        if status.removes_rank:
+        if status in MemberStatusAssignment.REMOVES_RANK:
             remove_rank(
                 user,
                 performed_by=set_by,
-                notes=f"Rank removed: member status set to '{status}'",
+                notes=f"Rank removed: status set to '{status}'",
             )
             removed_count, _ = RoleAssignment.objects.filter(user=user).delete()
             if removed_count:
@@ -178,24 +186,23 @@ def set_member_status(user, status, set_by, notes=""):
                     action=AuditLog.ACTION_ROLES_CLEARED,
                     user=user,
                     performed_by=set_by,
-                    notes=f"{removed_count} role(s) cleared: member status set to '{status}'",
+                    notes=f"{removed_count} role(s) cleared: status set to '{status}'",
                 )
 
 
 def clear_member_status(user, set_by, notes=""):
-    """Clear the member's current status back to normal. Returns False if no status was set."""
+    """Clear the member's current status back to active. Returns False if no status was set."""
+    config = HrConfiguration.get_solo()
+
     with transaction.atomic():
-        assignment = (
-            MemberStatusAssignment.objects.filter(user=user)
-            .select_related("status__auth_group")
-            .first()
-        )
+        assignment = MemberStatusAssignment.objects.filter(user=user).first()
         if not assignment:
             return False
 
         old_status = assignment.status
-        if old_status.auth_group:
-            user.groups.remove(old_status.auth_group)
+        old_group = _status_auth_group(config, old_status)
+        if old_group:
+            user.groups.remove(old_group)
         assignment.delete()
 
         AuditLog.objects.create(
@@ -263,64 +270,87 @@ def remove_label(user, label, performed_by, notes=""):
     return True
 
 
-def characters_missing_title(user, rank):
-    """Return list of EveCharacter objects that do not have rank.corp_title.
+def compute_member_alerts(user, config):
+    """Return alert dict for a single user.
 
-    Only checks characters that belong to rank.corp_title.corporation_id —
-    alts in other corporations are excluded.
+    Expects character_ownerships__character__characteraudit__characterroles__titles,
+    hr_rank_assignments__rank__corp_title, and hr_member_status__status to be
+    prefetched/select_related. Performs a single pass over character_ownerships.
+
+    audit_issue_chars is a list of (char, "stale"|"missing") tuples.
+    title_mismatch is suppressed (False) when the user is on any active status.
     """
-    if not rank.corp_title:
-        return []
-    expected = rank.corp_title.title
-    corp_id = rank.corp_title.corporation_id
-    missing = []
-    for ownership in user.character_ownerships.all():
-        char = ownership.character
-        if not char:
-            continue
-        if char.corporation_id != corp_id:
-            continue
-        try:
-            titles = {t.title for t in char.characteraudit.characterroles.titles.all()}
-        except AttributeError:
-            titles = set()
-        if expected not in titles:
-            missing.append(char)
-    return missing
+    home_corp_id = config.home_corp.corporation_id if config.home_corp_id else None
 
-
-def get_stale_title_chars(user, home_corp_id=None):
-    """Return characters that still hold the user's previous rank title in-game.
-
-    Relevant when a rank has been removed via a removes_rank status. Supports
-    prefetched character_ownerships and hr_rank_assignments — no extra queries
-    if the caller has prefetched those relations.
-    home_corp_id: when set, only characters in that corporation are checked.
-    Returns [] if there is no previous rank with a corp_title configured.
-    """
-    prev_assignment = next(
-        (a for a in user.hr_rank_assignments.all() if not a.is_current), None
+    current_assignment = next(
+        (a for a in user.hr_rank_assignments.all() if a.is_current), None
     )
-    if not prev_assignment or not prev_assignment.rank.corp_title_id:
-        return []
-    prev_corp_id = prev_assignment.rank.corp_title.corporation_id
-    prev_title = prev_assignment.rank.corp_title.title
-    stale = []
+    rank = current_assignment.rank if current_assignment else None
+
+    try:
+        member_status = user.hr_member_status
+    except Exception:
+        member_status = None
+    on_status = member_status.status if member_status else ""
+    rank_removed_by_status = bool(on_status == MemberStatusAssignment.BREAK and not rank)
+
+    title_corp_id = rank.corp_title.corporation_id if (rank and rank.corp_title) else None
+    expected_title = rank.corp_title.title if title_corp_id else None
+
+    prev_title = None
+    prev_corp_id = None
+    if not rank:
+        prev_assignment = next(
+            (a for a in user.hr_rank_assignments.all() if not a.is_current), None
+        )
+        if prev_assignment and prev_assignment.rank.corp_title_id:
+            prev_corp_id = prev_assignment.rank.corp_title.corporation_id
+            prev_title = prev_assignment.rank.corp_title.title
+
+    missing_title_chars = []
+    audit_issue_chars = []  # [(char, "stale"|"missing"), ...]
+    stale_title_chars = []
+
     for ownership in user.character_ownerships.all():
         char = ownership.character
         if not char:
             continue
         if home_corp_id and char.corporation_id != home_corp_id:
             continue
-        if char.corporation_id != prev_corp_id:
-            continue
+
         try:
-            titles = {t.title for t in char.characteraudit.characterroles.titles.all()}
-            if prev_title in titles:
-                stale.append(char)
+            audit = char.characteraudit
+            audit_ok = audit.active
         except AttributeError:
-            pass
-    return stale
+            audit = None
+            audit_ok = False
+
+        if not audit_ok:
+            audit_issue_chars.append((char, "missing" if audit is None else "stale"))
+
+        try:
+            char_titles = {t.title for t in audit.characterroles.titles.all()} if audit else set()
+        except AttributeError:
+            char_titles = set()
+
+        if expected_title is not None and char.corporation_id == title_corp_id:
+            if expected_title not in char_titles:
+                missing_title_chars.append(char)
+
+        if prev_title is not None and char.corporation_id == prev_corp_id:
+            if prev_title in char_titles:
+                stale_title_chars.append(char)
+
+    return {
+        "rank": rank,
+        "title_mismatch": bool(missing_title_chars) and not on_status,  # suppressed when on any status
+        "missing_title_chars": missing_title_chars,
+        "stale_title_chars": stale_title_chars,
+        "audit_issue_chars": audit_issue_chars,
+        "has_audit_issue": bool(audit_issue_chars),
+        "member_status": member_status,
+        "rank_removed_by_status": rank_removed_by_status,
+    }
 
 
 def prepare_members(config):
@@ -337,7 +367,7 @@ def prepare_members(config):
 
     users = (
         User.objects.filter(profile__state=config.aa_state)
-        .select_related("profile__main_character", "hr_member_status__status")
+        .select_related("profile__main_character", "hr_member_status")
         .prefetch_related(
             "character_ownerships__character__characteraudit__characterroles__titles",
             "hr_rank_assignments__rank__corp_title",
@@ -363,69 +393,17 @@ def prepare_members(config):
             if o.character and o.character.character_id != main.character_id
         ]
 
-        current_assignment = next(
-            (a for a in user.hr_rank_assignments.all() if a.is_current), None
-        )
-        rank = current_assignment.rank if current_assignment else None
-
-        missing_title_chars = []
-        audit_issue_chars = []
-        title_corp_id = rank.corp_title.corporation_id if (rank and rank.corp_title) else None
-        expected = rank.corp_title.title if title_corp_id else None
-
-        for ownership in user.character_ownerships.all():
-            char = ownership.character
-            if not char:
-                continue
-            # When home_corp is configured, only check that corp's characters
-            if home_corp_id and char.corporation_id != home_corp_id:
-                continue
-            try:
-                audit = char.characteraudit
-                if not audit.active:
-                    audit_issue_chars.append(char)
-                # Only check title on characters in the title's corporation
-                if expected is not None and char.corporation_id == title_corp_id:
-                    titles = {t.title for t in audit.characterroles.titles.all()}
-                    if expected not in titles:
-                        missing_title_chars.append(char)
-            except AttributeError:
-                audit_issue_chars.append(char)
-                if expected is not None and char.corporation_id == title_corp_id:
-                    missing_title_chars.append(char)
-
-        try:
-            member_status = user.hr_member_status
-        except Exception:
-            member_status = None
-
-        on_status = member_status.status if member_status else None
-        rank_removed_by_status = bool(on_status and on_status.removes_rank)
-        # Suppress title mismatch warnings for members on any active status — not actionable
-        title_mismatch = bool(missing_title_chars) and not on_status
-
-        # If rank was removed by a status, check if the member still has their previous title in-game
-        stale_title_chars = get_stale_title_chars(user, home_corp_id=home_corp_id) if rank_removed_by_status else []
-
+        alerts = compute_member_alerts(user, config)
         labels = [a.label for a in user.hr_label_assignments.all()]
 
-        members.append(
-            {
-                "user": user,
-                "main": main,
-                "alts": alts,
-                "alt_count": len(alts),
-                "rank": rank,
-                "title_mismatch": title_mismatch,
-                "missing_title_chars": missing_title_chars,
-                "stale_title_chars": stale_title_chars,
-                "audit_issue_chars": audit_issue_chars,
-                "has_audit_issue": bool(audit_issue_chars),
-                "member_status": member_status,
-                "rank_removed_by_status": rank_removed_by_status,
-                "labels": labels,
-            }
-        )
+        members.append({
+            "user": user,
+            "main": main,
+            "alts": alts,
+            "alt_count": len(alts),
+            **alerts,
+            "labels": labels,
+        })
 
     members.sort(key=lambda m: m["main"].character_name)
     return members

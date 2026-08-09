@@ -9,7 +9,6 @@ from .models import (
     LabelCategory,
     MemberLabel,
     MemberLabelAssignment,
-    MemberStatus,
     Rank,
     RankAssignment,
     Role,
@@ -103,11 +102,6 @@ class AuditLogAdmin(admin.ModelAdmin):
     def has_change_permission(self, request, obj=None):
         return False
 
-
-@admin.register(MemberStatus)
-class MemberStatusAdmin(admin.ModelAdmin):
-    list_display = ["name", "auth_group", "removes_rank", "description"]
-    list_editable = ["removes_rank"]
 
 
 @admin.register(LabelCategory)

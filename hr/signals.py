@@ -86,26 +86,27 @@ def sync_group_removal(sender, instance, action, pk_set, **kwargs):
             )
 
         # Clear status if its group was revoked externally
-        status_assignment = (
-            MemberStatusAssignment.objects.filter(
-                user=user,
-                status__auth_group__in=group_pk_set,
-            )
-            .select_related("status")
-            .first()
-        )
-        if status_assignment:
-            from .models import MemberStatusLog
-            old_status = status_assignment.status
-            status_assignment.delete()
-            MemberStatusLog.objects.create(
-                user=user,
-                old_status=old_status,
-                new_status=None,
-                set_by=None,
-                notes="Automatic removal: group revoked externally",
-            )
-            logger.info(
-                "Cleared status '%s' from %s due to external group removal",
-                old_status, user,
-            )
+        from .models import AuditLog, HrConfiguration, MemberStatusAssignment
+        config = HrConfiguration.get_solo()
+        status_to_clear = None
+        if config.break_auth_group_id and config.break_auth_group_id in group_pk_set:
+            status_to_clear = MemberStatusAssignment.BREAK
+        elif config.away_auth_group_id and config.away_auth_group_id in group_pk_set:
+            status_to_clear = MemberStatusAssignment.AWAY
+        if status_to_clear:
+            status_assignment = MemberStatusAssignment.objects.filter(
+                user=user, status=status_to_clear
+            ).first()
+            if status_assignment:
+                status_assignment.delete()
+                AuditLog.objects.create(
+                    action=AuditLog.ACTION_STATUS_CLEARED,
+                    user=user,
+                    performed_by=None,
+                    old_status=status_to_clear,
+                    notes="Automatic removal: group revoked externally",
+                )
+                logger.info(
+                    "Cleared status '%s' from %s due to external group removal",
+                    status_to_clear, user,
+                )

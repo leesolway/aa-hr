@@ -41,10 +41,12 @@
                             <th>{% trans "Character" %}</th>
                             <th>{% trans "Corporation" %}</th>
                             <th>{% trans "Alliance" %}</th>
+                            <th>{% trans "Titles" %}</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for char in page_obj %}
+                        {% with titles=char.characteraudit.characterroles.titles.all %}
                         <tr>
                             <td>
                                 <img src="{% eve_image 'character' char.character_id 32 %}"
@@ -68,7 +70,17 @@
                                 <span class="text-muted">—</span>
                                 {% endif %}
                             </td>
+                            <td>
+                                {% if titles %}
+                                    {% for title in titles %}
+                                    <span class="badge bg-warning text-dark me-1">{{ title.title }}</span>
+                                    {% endfor %}
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
                         </tr>
+                        {% endwith %}
                         {% endfor %}
                     </tbody>
                 </table>

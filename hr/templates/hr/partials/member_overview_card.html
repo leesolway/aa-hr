@@ -22,7 +22,7 @@
                     <td class="align-middle">
                         {% if current_status_assignment %}
                         <span class="badge bg-warning text-dark fs-6">
-                            <i class="fa-solid fa-clock"></i> {{ current_status_assignment.status.name }}
+                            <i class="fa-solid fa-clock"></i> {{ current_status_assignment.get_status_display }}
                         </span>
                         {% if current_status_assignment.notes %}
                         <span class="text-muted small ms-2">{{ current_status_assignment.notes }}</span>

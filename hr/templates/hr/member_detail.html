@@ -143,30 +143,16 @@
                     <h5 class="mb-0"><i class="fa-solid fa-clock"></i> {% trans "Member Status" %}</h5>
                 </div>
                 <div class="card-body">
-                    {% if current_status_assignment %}
                     <form method="post" action="{% url 'hr:set_status' member_user.pk %}">
                         {% csrf_token %}
-                        <input type="hidden" name="action" value="clear">
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold" for="clear-status-notes">{% trans "Notes" %}</label>
-                            <textarea id="clear-status-notes" name="notes" class="form-control" rows="2"
-                                      placeholder="{% trans 'Reason (optional)' %}"></textarea>
-                        </div>
-                        <button type="submit" class="btn btn-outline-secondary w-100">
-                            <i class="fa-solid fa-circle-xmark"></i> {% trans "Clear Status" %}
-                        </button>
-                    </form>
-                    {% else %}
-                    <p class="text-muted small mb-3">{% trans "No active status — member is active." %}</p>
-                    <form method="post" action="{% url 'hr:set_status' member_user.pk %}">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="set">
                         <div class="mb-3">
                             <label class="form-label fw-semibold" for="status-select">{% trans "Status" %}</label>
-                            <select id="status-select" name="status_id" class="form-select">
-                                {% for s in all_statuses %}
-                                <option value="{{ s.pk }}">
-                                    {{ s.name }}{% if s.removes_rank %} ({% trans "removes rank" %}){% endif %}
+                            <select id="status-select" name="status" class="form-select">
+                                {% for value, label in status_choices %}
+                                <option value="{{ value }}"
+                                    {% if current_status_assignment and current_status_assignment.status == value %}selected
+                                    {% elif not current_status_assignment and value == "active" %}selected{% endif %}>
+                                    {{ label }}{% if value == "break" %} ({% trans "removes rank" %}){% endif %}
                                 </option>
                                 {% endfor %}
                             </select>
@@ -177,10 +163,9 @@
                                       placeholder="{% trans 'Reason (optional)' %}"></textarea>
                         </div>
                         <button type="submit" class="btn btn-warning w-100">
-                            <i class="fa-solid fa-clock"></i> {% trans "Set Status" %}
+                            <i class="fa-solid fa-clock"></i> {% trans "Save Status" %}
                         </button>
                     </form>
-                    {% endif %}
                 </div>
             </div>
         </div>

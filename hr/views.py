@@ -8,16 +8,15 @@ from django.shortcuts import get_object_or_404, redirect, render
 
 from allianceauth.eveonline.models import EveCharacter
 
-from .models import AuditLog, HrConfiguration, LabelCategory, MemberLabel, MemberStatus, MemberStatusAssignment, Role, RoleAssignment, Rank
+from .models import AuditLog, HrConfiguration, LabelCategory, MemberLabel, MemberStatusAssignment, Role, RoleAssignment, Rank
 from .services import (
     assign_label,
     assign_rank,
-    characters_missing_title,
     clear_member_status,
+    compute_member_alerts,
     get_current_rank,
     get_effective_assignable_ranks,
     get_effective_removable_rank_ids,
-    get_stale_title_chars,
     prepare_members,
     remove_label,
     remove_rank,
@@ -141,13 +140,16 @@ def member_list(request):
 @login_required
 @permission_required("hr.access_hr")
 def member_detail(request, user_id):
+    config = HrConfiguration.get_solo()
+
     member_user = get_object_or_404(
         User.objects.select_related(
             "profile__main_character",
-            "hr_member_status__status",
+            "hr_member_status",
         ).prefetch_related(
             "character_ownerships__character__characteraudit__characterroles__titles",
             "hr_rank_assignments__rank__auth_group",
+            "hr_rank_assignments__rank__corp_title",
             "hr_rank_assignments__assigned_by__profile__main_character",
             "hr_label_assignments__label__category",
         ),
@@ -172,14 +174,11 @@ def member_detail(request, user_id):
     if request.user.is_superuser:
         assignable_ranks = Rank.objects.filter(is_active=True)
 
-    missing_title_chars = []
-    stale_title_chars = []
-    if current_rank:
-        missing_title_chars = characters_missing_title(member_user, current_rank)
+    alerts = compute_member_alerts(member_user, config)
 
     audit_entries = AuditLog.objects.filter(user=member_user).select_related(
         "performed_by__profile__main_character",
-        "old_rank", "new_rank", "old_status", "new_status", "label",
+        "old_rank", "new_rank", "label",
     )
     audit_page = Paginator(audit_entries, 25).get_page(request.GET.get("audit_page"))
 
@@ -192,27 +191,7 @@ def member_detail(request, user_id):
             if o.character and o.character.character_id != main.character_id
         ]
 
-    audit_issue_chars = []
-    for ownership in member_user.character_ownerships.all():
-        char = ownership.character
-        if not char:
-            continue
-        try:
-            if not char.characteraudit.active:
-                audit_issue_chars.append((char, "stale"))
-        except AttributeError:
-            audit_issue_chars.append((char, "missing"))
-
-    try:
-        current_status_assignment = member_user.hr_member_status
-    except Exception:
-        current_status_assignment = None
-
-    # If rank was removed by a status, check if the member still has their previous title in-game
-    rank_removed_by_status = bool(current_status_assignment and current_status_assignment.status.removes_rank and not current_rank)
-    stale_title_chars = get_stale_title_chars(member_user) if rank_removed_by_status else []
-
-    all_statuses = MemberStatus.objects.all()
+    status_choices = MemberStatusAssignment.STATUS_CHOICES
 
     current_label_ids = {a.label_id for a in member_user.hr_label_assignments.all()}
     label_categories = (
@@ -221,7 +200,6 @@ def member_detail(request, user_id):
         .distinct()
         .order_by("display_order", "name")
     )
-    # Labels with no category
     uncategorised_labels = MemberLabel.objects.filter(is_active=True, category__isnull=True)
 
     try:
@@ -244,15 +222,15 @@ def member_detail(request, user_id):
         "alts": alts,
         "current_rank": current_rank,
         "current_assignment": current_assignment,
-        "missing_title_chars": missing_title_chars,
-        "stale_title_chars": stale_title_chars,
+        "missing_title_chars": alerts["missing_title_chars"],
+        "stale_title_chars": alerts["stale_title_chars"],
+        "audit_issue_chars": alerts["audit_issue_chars"],
+        "current_status_assignment": alerts["member_status"],
         "assignable_ranks": assignable_ranks,
         "can_assign": can_assign,
         "can_remove": can_remove,
         "audit_page": audit_page,
-        "audit_issue_chars": audit_issue_chars,
-        "current_status_assignment": current_status_assignment,
-        "all_statuses": all_statuses,
+        "status_choices": status_choices,
         "current_label_ids": current_label_ids,
         "label_categories": label_categories,
         "uncategorised_labels": uncategorised_labels,
@@ -311,25 +289,23 @@ def set_status(request, user_id):
         return HttpResponseForbidden("You do not have an HR role.")
 
     member_user = get_object_or_404(User, pk=user_id)
-    action = request.POST.get("action", "").strip()
     notes = request.POST.get("notes", "").strip()
 
-    if action == "clear":
+    status = request.POST.get("status", "").strip()
+    valid = {v for v, _ in MemberStatusAssignment.STATUS_CHOICES}
+    if status not in valid:
+        messages.error(request, "Invalid status.")
+        return redirect("hr:member_detail", user_id=user_id)
+
+    if status == MemberStatusAssignment.ACTIVE:
         cleared = clear_member_status(member_user, set_by=request.user, notes=notes)
         if cleared:
             messages.success(request, f"Status cleared for {member_user}.")
         else:
             messages.info(request, f"{member_user} had no active status.")
-    elif action == "set":
-        status_id = request.POST.get("status_id", "").strip()
-        if not status_id.isdigit():
-            messages.error(request, "Invalid status.")
-            return redirect("hr:member_detail", user_id=user_id)
-        status = get_object_or_404(MemberStatus, pk=int(status_id))
-        set_member_status(member_user, status=status, set_by=request.user, notes=notes)
-        messages.success(request, f"{member_user} status set to '{status}'.")
     else:
-        messages.error(request, "Invalid action.")
+        set_member_status(member_user, status=status, set_by=request.user, notes=notes)
+        messages.success(request, f"{member_user} status set to '{MemberStatusAssignment(status=status).get_status_display()}'.")
 
     return redirect("hr:member_detail", user_id=user_id)
 
@@ -370,7 +346,7 @@ def member_dashboard(request):
         is_active=True, member_assignable=True, category__isnull=True
     )
 
-    assignable_statuses = MemberStatus.objects.filter(member_assignable=True)
+    status_choices = MemberStatusAssignment.STATUS_CHOICES
 
     try:
         main = user.profile.main_character
@@ -409,7 +385,7 @@ def member_dashboard(request):
 
     audit_page = Paginator(
         AuditLog.objects.filter(user=user)
-        .select_related("old_rank", "new_rank", "old_status", "new_status", "label", "performed_by__profile__main_character"),
+        .select_related("old_rank", "new_rank", "label", "performed_by__profile__main_character"),
         10,
     ).page(1)
 
@@ -422,7 +398,7 @@ def member_dashboard(request):
         "main": main,
         "current_rank": current_rank,
         "current_status_assignment": current_status_assignment,
-        "assignable_statuses": assignable_statuses,
+        "status_choices": status_choices,
         "current_label_ids": current_label_ids,
         "label_categories": label_categories,
         "uncategorised_labels": uncategorised_labels,
@@ -441,25 +417,17 @@ def self_set_status(request):
     if request.method != "POST":
         return redirect("hr:me")
 
-    action = request.POST.get("action", "").strip()
+    status = request.POST.get("status", "").strip()
+    if status not in {v for v, _ in MemberStatusAssignment.STATUS_CHOICES}:
+        messages.error(request, "Invalid status.")
+        return redirect("hr:me")
 
-    if action == "clear":
-        current = MemberStatusAssignment.objects.filter(user=request.user).select_related("status").first()
-        if current and current.status.member_assignable:
-            clear_member_status(request.user, set_by=request.user, notes="Self-cleared via member dashboard")
-            messages.success(request, "Your status has been cleared.")
-        else:
-            messages.error(request, "You cannot clear this status yourself.")
-    elif action == "set":
-        status_id = request.POST.get("status_id", "").strip()
-        if not status_id.isdigit():
-            messages.error(request, "Invalid status.")
-            return redirect("hr:me")
-        status = get_object_or_404(MemberStatus, pk=int(status_id), member_assignable=True)
-        set_member_status(request.user, status=status, set_by=request.user, notes="")
-        messages.success(request, f"Your status has been set to '{status}'.")
+    if status == MemberStatusAssignment.ACTIVE:
+        clear_member_status(request.user, set_by=request.user, notes="Self-cleared via member dashboard")
+        messages.success(request, "Your status has been cleared.")
     else:
-        messages.error(request, "Invalid action.")
+        set_member_status(request.user, status=status, set_by=request.user, notes="")
+        messages.success(request, f"Your status has been set to '{MemberStatusAssignment(status=status).get_status_display()}'.")
 
     return redirect("hr:me")
 
@@ -576,7 +544,9 @@ def unregistered(request):
     if not config.aa_state:
         return render(request, "hr/unregistered.html", {"characters": [], "state": None})
 
-    characters = _unregistered_chars_qs(config.aa_state).order_by("corporation_name", "character_name")
+    characters = _unregistered_chars_qs(config.aa_state).prefetch_related(
+        "characteraudit__characterroles__titles"
+    ).order_by("corporation_name", "character_name")
 
     search = request.GET.get("search", "").strip()
     if search:
@@ -604,7 +574,6 @@ def audit(request):
         "user__profile__main_character",
         "performed_by__profile__main_character",
         "old_rank", "new_rank",
-        "old_status", "new_status",
         "label",
     )
 

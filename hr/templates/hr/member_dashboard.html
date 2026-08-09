@@ -58,44 +58,26 @@
             <div class="card mb-3">
                 <div class="card-header"><h6 class="mb-0">{% trans "Status" %}</h6></div>
                 <ul class="list-group list-group-flush">
-                    {# Active option — clears any current status #}
+                    {% for value, label in status_choices %}
                     <li class="list-group-item d-flex align-items-center gap-3">
                         <form method="post" action="{% url 'hr:self_set_status' %}" class="flex-shrink-0">
                             {% csrf_token %}
-                            <input type="hidden" name="action" value="clear">
-                            {% if not current_status_assignment %}
+                            <input type="hidden" name="status" value="{{ value }}">
+                            {% if value == "active" and not current_status_assignment %}
                             <button type="submit" class="btn btn-sm btn-success" style="min-width:7rem" disabled>
-                                <i class="fa-solid fa-check me-1"></i>{% trans "Active" %}
+                                <i class="fa-solid fa-check me-1"></i>{{ label }}
+                            </button>
+                            {% elif value != "active" and current_status_assignment.status == value %}
+                            <button type="submit" class="btn btn-sm btn-success" style="min-width:7rem" disabled>
+                                <i class="fa-solid fa-check me-1"></i>{{ label }}
                             </button>
                             {% else %}
                             <button type="submit" class="btn btn-sm btn-outline-light" style="min-width:7rem">
-                                {% trans "Active" %}
+                                {{ label }}
                             </button>
                             {% endif %}
                         </form>
-                        <span class="text-muted small">{% trans "Active" %}</span>
-                    </li>
-                    {# Each member-assignable status #}
-                    {% for status in assignable_statuses %}
-                    <li class="list-group-item d-flex align-items-center gap-3">
-                        <form method="post" action="{% url 'hr:self_set_status' %}" class="flex-shrink-0">
-                            {% csrf_token %}
-                            <input type="hidden" name="action" value="set">
-                            <input type="hidden" name="status_id" value="{{ status.pk }}">
-                            {% if current_status_assignment and current_status_assignment.status_id == status.pk %}
-                            <button type="submit" class="btn btn-sm btn-success" style="min-width:7rem" disabled>
-                                <i class="fa-solid fa-check me-1"></i>{{ status.name }}
-                            </button>
-                            {% else %}
-                            <button type="submit" class="btn btn-sm btn-outline-light" style="min-width:7rem">
-                                {{ status.name }}
-                            </button>
-                            {% endif %}
-                        </form>
-                        {% if status.description %}
-                        <span class="text-muted small">{{ status.description }}</span>
-                        {% endif %}
-                        {% if current_status_assignment and current_status_assignment.status_id == status.pk and current_status_assignment.notes %}
+                        {% if value != "active" and current_status_assignment.status == value and current_status_assignment.notes %}
                         <span class="text-muted small fst-italic">{{ current_status_assignment.notes }}</span>
                         {% endif %}
                     </li>

@@ -24,6 +24,22 @@ class HrConfiguration(SingletonModel):
             "Leave blank to include all members in the configured state."
         ),
     )
+    away_auth_group = models.ForeignKey(
+        "auth.Group",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="AA group assigned to members with Away status.",
+    )
+    break_auth_group = models.ForeignKey(
+        "auth.Group",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="AA group assigned to members on Break.",
+    )
 
     class Meta:
         verbose_name = "Configuration"
@@ -146,50 +162,27 @@ class RoleAssignment(models.Model):
         return f"{self.user} — {self.role}"
 
 
-class MemberStatus(models.Model):
-    """Defines a named status that can be applied to a member (e.g. Break, Away)."""
-
-    name = models.CharField(max_length=100, unique=True)
-    auth_group = models.OneToOneField(
-        Group,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="hr_member_status",
-        help_text="AA group to add the member to when this status is applied.",
-    )
-    removes_rank = models.BooleanField(
-        default=False,
-        help_text="Automatically remove the member's rank when this status is applied.",
-    )
-    member_assignable = models.BooleanField(
-        default=False,
-        help_text="Allow members to set and clear this status themselves via the member dashboard.",
-    )
-    description = models.TextField(blank=True, default="")
-
-    class Meta:
-        ordering = ["name"]
-        verbose_name = "Status — Definition"
-        verbose_name_plural = "Status — Definitions"
-
-    def __str__(self):
-        return self.name
-
-
 class MemberStatusAssignment(models.Model):
     """Active status for a user. Absent means the user is normal/active."""
+
+    ACTIVE = "active"
+    AWAY   = "away"
+    BREAK  = "break"
+    STATUS_CHOICES = [
+        (ACTIVE, "Active"),
+        (AWAY,   "Away"),
+        (BREAK,  "Break"),
+    ]
+
+    # Behaviour constants — no DB flags needed
+    REMOVES_RANK = frozenset({BREAK})
 
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="hr_member_status",
     )
-    status = models.ForeignKey(
-        MemberStatus,
-        on_delete=models.PROTECT,
-        related_name="assignments",
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
     set_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -205,54 +198,8 @@ class MemberStatusAssignment(models.Model):
         verbose_name_plural = "Status — Assignments"
 
     def __str__(self):
-        return f"{self.user} — {self.status}"
+        return f"{self.user} — {self.get_status_display()}"
 
-
-class MemberStatusLog(models.Model):
-    """Immutable audit log for member status changes."""
-
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="hr_status_log",
-    )
-    old_status = models.ForeignKey(
-        MemberStatus,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
-    )
-    new_status = models.ForeignKey(
-        MemberStatus,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
-    )
-    set_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="hr_status_log_actions",
-    )
-    timestamp = models.DateTimeField(auto_now_add=True)
-    notes = models.TextField(blank=True, default="")
-
-    class Meta:
-        ordering = ["-timestamp"]
-        verbose_name = "Status — Log Entry"
-        verbose_name_plural = "Status — Log"
-        indexes = [
-            models.Index(
-                fields=["user", "-timestamp"],
-                name="hr_statuslog_user_ts_idx",
-            ),
-        ]
-
-    def __str__(self):
-        return f"{self.user}: {self.old_status} → {self.new_status}"
 
 
 class LabelCategory(models.Model):
@@ -432,12 +379,8 @@ class AuditLog(models.Model):
     new_rank = models.ForeignKey(Rank, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
 
     # Status fields — populated for status_* actions
-    old_status = models.ForeignKey(
-        MemberStatus, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
-    )
-    new_status = models.ForeignKey(
-        MemberStatus, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
-    )
+    old_status = models.CharField(max_length=20, blank=True, default="")
+    new_status = models.CharField(max_length=20, blank=True, default="")
 
     # Label field — populated for label_* actions
     label = models.ForeignKey(
