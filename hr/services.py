@@ -404,16 +404,22 @@ def compute_member_alerts(user, config, all_titled_roles=None):
             prev_corp_id = prev_assignment.rank.corp_title.corporation_id
             prev_title = prev_assignment.rank.corp_title.title
 
+    try:
+        main_char = user.profile.main_character
+    except AttributeError:
+        main_char = None
+    main_char_id = main_char.character_id if main_char else None
+
     # Roles this user currently holds
     held_role_ids = {ra.role_id for ra in user.role_assignments.all()}
 
     # Roles held by user that require a corp title — check characters have it
     role_requirements = [
-        (ra.role, ra.role.corp_title.title, ra.role.corp_title.corporation_id)
+        (ra.role, ra.role.corp_title.title, ra.role.corp_title.corporation_id, ra.role.title_main_only)
         for ra in user.role_assignments.all()
         if ra.role.corp_title_id
     ]
-    role_missing = {role: [] for role, _, _ in role_requirements}
+    role_missing = {role: [] for role, _, _, _ in role_requirements}
 
     # Roles NOT held by user that have a corp title — flag if character has it anyway
     if all_titled_roles is None:
@@ -421,11 +427,11 @@ def compute_member_alerts(user, config, all_titled_roles=None):
             Role.objects.filter(corp_title__isnull=False).select_related("corp_title")
         )
     unattained_role_requirements = [
-        (role, role.corp_title.title, role.corp_title.corporation_id)
+        (role, role.corp_title.title, role.corp_title.corporation_id, role.title_main_only)
         for role in all_titled_roles
         if role.pk not in held_role_ids
     ]
-    stale_role_map = {role: [] for role, _, _ in unattained_role_requirements}
+    stale_role_map = {role: [] for role, _, _, _ in unattained_role_requirements}
 
     missing_title_chars = []
     audit_issue_chars = []  # [(char, "stale"|"missing"), ...]
@@ -437,6 +443,8 @@ def compute_member_alerts(user, config, all_titled_roles=None):
             continue
         if home_corp_id and char.corporation_id != home_corp_id:
             continue
+
+        is_main = char.character_id == main_char_id
 
         try:
             audit = char.characteraudit
@@ -461,11 +469,15 @@ def compute_member_alerts(user, config, all_titled_roles=None):
             if prev_title in char_titles:
                 stale_title_chars.append(char)
 
-        for role, req_title, req_corp_id in role_requirements:
+        for role, req_title, req_corp_id, main_only in role_requirements:
+            if main_only and not is_main:
+                continue
             if char.corporation_id == req_corp_id and req_title not in char_titles:
                 role_missing[role].append(char)
 
-        for role, req_title, req_corp_id in unattained_role_requirements:
+        for role, req_title, req_corp_id, main_only in unattained_role_requirements:
+            if main_only and not is_main:
+                continue
             if char.corporation_id == req_corp_id and req_title in char_titles:
                 stale_role_map[role].append(char)
 

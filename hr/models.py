@@ -138,7 +138,11 @@ class Role(models.Model):
         null=True,
         blank=True,
         related_name="hr_roles",
-        help_text="EVE title that members holding this role should have on all characters.",
+        help_text="EVE title that members holding this role should have on their characters.",
+    )
+    title_main_only = models.BooleanField(
+        default=False,
+        help_text="Only require the main character to hold the in-game title, not all characters.",
     )
     can_assign = models.ManyToManyField(
         Rank, blank=True, related_name="assignable_by_roles"
