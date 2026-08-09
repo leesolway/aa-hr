@@ -11,6 +11,19 @@
     </div>
     {% else %}
 
+    {% if has_snoozed %}
+    <div class="d-flex justify-content-end mb-3">
+        <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" role="switch" id="showSnoozed"
+                   {% if show_snoozed %}checked{% endif %}
+                   onchange="window.location='?{% if not show_snoozed %}show_snoozed=1{% endif %}'">
+            <label class="form-check-label text-muted small" for="showSnoozed">
+                {% trans "Show snoozed" %}
+            </label>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="row g-3 mb-3">
         <div class="col-sm-6 col-xl-3">
             <a href="{% url 'hr:member_list' %}" class="text-decoration-none">
@@ -79,11 +92,13 @@
                             <th>{% trans "Corporation" %}</th>
                             <th>{% trans "Rank" %}</th>
                             <th>{% trans "Issue" %}</th>
+                            <th style="width:60px;"></th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for member in issue_members %}
-                        <tr style="cursor:pointer;" onclick="window.location='{% url 'hr:member_detail' member.user.pk %}'">
+                        <tr class="{% if member.snooze %}table-secondary{% endif %}"
+                            style="cursor:pointer;" onclick="window.location='{% url 'hr:member_detail' member.user.pk %}'">
                             <td>
                                 <img src="{% eve_image 'character' member.main.character_id 32 %}"
                                      class="rounded" width="32" height="32" loading="lazy"
@@ -128,6 +143,33 @@
                                     <i class="fa-solid fa-database"></i> {% trans "Audit issue" %}
                                 </span>
                                 {% endif %}
+                                {% if member.snooze %}
+                                <span class="badge bg-secondary ms-1"
+                                      title="{{ member.snooze.note }}{% if member.snooze.expires_at %} · {% trans 'until' %} {{ member.snooze.expires_at|date:'Y-m-d' }}{% endif %}"
+                                      data-bs-toggle="tooltip">
+                                    <i class="fa-solid fa-bell-slash"></i> {% trans "Snoozed" %}
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td onclick="event.stopPropagation();">
+                                {% if member.snooze %}
+                                <form method="post" action="{% url 'hr:clear_snooze' member.user.pk %}">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-sm btn-secondary" title="{% trans 'Clear snooze' %}">
+                                        <i class="fa-solid fa-bell"></i>
+                                    </button>
+                                </form>
+                                {% else %}
+                                <button type="button"
+                                        class="btn btn-sm btn-secondary"
+                                        title="{% trans 'Snooze warnings' %}"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#snoozeModal"
+                                        data-user-id="{{ member.user.pk }}"
+                                        data-user-name="{{ member.main.character_name }}">
+                                    <i class="fa-solid fa-bell-slash"></i>
+                                </button>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -145,6 +187,70 @@
     </div>
     {% endif %}
 
+    {# Snooze modal #}
+    <div class="modal fade" id="snoozeModal" tabindex="-1" aria-labelledby="snoozeModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="post" id="snoozeForm" action="">
+                    {% csrf_token %}
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="snoozeModalLabel">
+                            <i class="fa-solid fa-bell-slash"></i> {% trans "Snooze warnings" %}
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted small">{% trans "This hides the member from the issues list for all HR viewers. The issues still exist — snooze when you know about it but can't act on it right now." %}</p>
+                        <p id="snoozeTargetName" class="fw-bold"></p>
+                        <div class="mb-3">
+                            <label for="snoozeNote" class="form-label">{% trans "Reason" %} <span class="text-danger">*</span></label>
+                            <textarea class="form-control" id="snoozeNote" name="note" rows="2" required placeholder="{% trans 'e.g. Waiting on corptools update, title sync delayed' %}"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="snoozeExpiry" class="form-label">{% trans "Expires" %} <span class="text-muted small">{% trans "(optional — leave blank for indefinite)" %}</span></label>
+                            <div class="d-flex gap-2 mb-2">
+                                <button type="button" class="btn btn-sm btn-secondary snooze-preset" data-months="1">{% trans "1 month" %}</button>
+                                <button type="button" class="btn btn-sm btn-secondary snooze-preset" data-months="3">{% trans "3 months" %}</button>
+                                <button type="button" class="btn btn-sm btn-secondary snooze-preset" data-months="6">{% trans "6 months" %}</button>
+                            </div>
+                            <input type="date" class="form-control" id="snoozeExpiry" name="expires_at">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fa-solid fa-bell-slash"></i> {% trans "Snooze" %}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        new bootstrap.Tooltip(el);
+    });
+
+    document.getElementById('snoozeModal').addEventListener('show.bs.modal', function(event) {
+        const btn = event.relatedTarget;
+        const userId = btn.getAttribute('data-user-id');
+        const userName = btn.getAttribute('data-user-name');
+        document.getElementById('snoozeTargetName').textContent = userName;
+        document.getElementById('snoozeForm').action = '/hr/user/' + userId + '/snooze/';
+        document.getElementById('snoozeNote').value = '';
+        document.getElementById('snoozeExpiry').value = '';
+    });
+
+    document.querySelectorAll('.snooze-preset').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const months = parseInt(this.getAttribute('data-months'));
+            const d = new Date();
+            d.setMonth(d.getMonth() + months);
+            document.getElementById('snoozeExpiry').value = d.toISOString().slice(0, 10);
+        });
+    });
+    </script>
 
     {% endif %}
 </div>

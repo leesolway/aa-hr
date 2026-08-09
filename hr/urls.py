@@ -17,4 +17,6 @@ urlpatterns = [
     path("user/<int:user_id>/set-role/", views.set_role, name="set_role"),
     path("unregistered/", views.unregistered, name="unregistered"),
     path("audit/", views.audit, name="audit"),
+    path("user/<int:user_id>/snooze/", views.snooze_warning, name="snooze_warning"),
+    path("user/<int:user_id>/snooze/clear/", views.clear_snooze, name="clear_snooze"),
 ]

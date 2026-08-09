@@ -1,3 +1,5 @@
+from datetime import datetime, time as dt_time
+
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required, permission_required
@@ -5,10 +7,12 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from allianceauth.eveonline.models import EveCharacter
 
-from .models import AuditLog, HrConfiguration, LabelCategory, MemberLabel, MemberStatusAssignment, Role, RoleAssignment, Rank
+from .models import AuditLog, DashboardSnooze, HrConfiguration, LabelCategory, MemberLabel, MemberStatusAssignment, Role, RoleAssignment, Rank
 from .services import (
     assign_label,
     assign_rank,
@@ -52,21 +56,43 @@ def dashboard(request):
         return render(request, "hr/dashboard.html", {"state": None})
 
     members = prepare_members(config)
+    show_snoozed = request.GET.get("show_snoozed") == "1"
 
     total = len(members)
-    # Exclude Break members from no_rank — their rank was intentionally removed
-    no_rank = sum(1 for m in members if not m["rank"] and not m["rank_removed_by_status"])
-    mismatches = sum(1 for m in members if m["title_mismatch"])
-    audit_issues = sum(1 for m in members if m["has_audit_issue"])
 
-    issue_members = [
-        m for m in members
-        if m["title_mismatch"]
-        or m["stale_title_chars"]
-        or (not m["rank"] and not m["rank_removed_by_status"])
-        or m["has_audit_issue"]
-    ]
+    now = timezone.now()
+    active_snoozes = DashboardSnooze.objects.filter(
+        Q(expires_at__isnull=True) | Q(expires_at__gt=now)
+    ).select_related("snoozed_by")
+    snooze_map = {s.user_id: s for s in active_snoozes}
+    snoozed_ids = set(snooze_map)
 
+    def _is_issue(m):
+        return (
+            m["title_mismatch"]
+            or m["stale_title_chars"]
+            or (not m["rank"] and not m["rank_removed_by_status"])
+            or m["has_audit_issue"]
+        )
+
+    def _not_snoozed(m):
+        return show_snoozed or m["user"].pk not in snoozed_ids
+
+    no_rank      = sum(1 for m in members if not m["rank"] and not m["rank_removed_by_status"] and _not_snoozed(m))
+    mismatches   = sum(1 for m in members if m["title_mismatch"] and _not_snoozed(m))
+    audit_issues = sum(1 for m in members if m["has_audit_issue"] and _not_snoozed(m))
+
+    all_issue_members = [m for m in members if _is_issue(m)]
+    for m in all_issue_members:
+        if m["user"].pk in snoozed_ids:
+            m["snooze"] = snooze_map[m["user"].pk]
+
+    if show_snoozed:
+        issue_members = all_issue_members
+    else:
+        issue_members = [m for m in all_issue_members if m["user"].pk not in snoozed_ids]
+
+    has_snoozed = bool(snoozed_ids & {m["user"].pk for m in all_issue_members})
     unregistered_count = _unregistered_chars_qs(config.aa_state).count()
 
     return render(request, "hr/dashboard.html", {
@@ -76,6 +102,8 @@ def dashboard(request):
         "title_mismatches": mismatches,
         "audit_issues": audit_issues,
         "issue_members": issue_members,
+        "show_snoozed": show_snoozed,
+        "has_snoozed": has_snoozed,
         "unregistered_count": unregistered_count,
     })
 
@@ -596,3 +624,50 @@ def audit(request):
         "action_filter": action_filter,
         "action_choices": AuditLog.ACTION_CHOICES,
     })
+
+
+# ---------------------------------------------------------------------------
+# Dashboard snooze
+# ---------------------------------------------------------------------------
+
+@login_required
+@permission_required("hr.access_hr")
+@require_POST
+def snooze_warning(request, user_id):
+    target_user = get_object_or_404(User, pk=user_id)
+    note = request.POST.get("note", "").strip()
+    expires_date = request.POST.get("expires_at", "").strip()
+
+    if not note:
+        messages.error(request, "A note is required when snoozing warnings.")
+        return redirect("hr:index")
+
+    expires_at = None
+    if expires_date:
+        try:
+            d = datetime.strptime(expires_date, "%Y-%m-%d").date()
+            expires_at = timezone.make_aware(datetime.combine(d, dt_time.max))
+        except ValueError:
+            messages.error(request, "Invalid expiry date.")
+            return redirect("hr:index")
+
+    DashboardSnooze.objects.update_or_create(
+        user=target_user,
+        defaults={
+            "snoozed_by": request.user,
+            "note": note,
+            "expires_at": expires_at,
+        },
+    )
+    messages.success(request, f"Warnings for {target_user} snoozed.")
+    return redirect("hr:index")
+
+
+@login_required
+@permission_required("hr.access_hr")
+@require_POST
+def clear_snooze(request, user_id):
+    target_user = get_object_or_404(User, pk=user_id)
+    DashboardSnooze.objects.filter(user=target_user).delete()
+    messages.success(request, f"Snooze cleared for {target_user}.")
+    return redirect("hr:index")

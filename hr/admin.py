@@ -5,6 +5,7 @@ from corptools.models import CharacterTitle
 
 from .models import (
     AuditLog,
+    DashboardSnooze,
     HrConfiguration,
     LabelCategory,
     MemberLabel,
@@ -84,6 +85,13 @@ class HrConfigurationAdmin(admin.ModelAdmin):
             request,
             f"Backfill complete: {assigned} assigned, {skipped} skipped (already ranked), {no_match} no matching rank found.",
         )
+
+
+@admin.register(DashboardSnooze)
+class DashboardSnoozeAdmin(admin.ModelAdmin):
+    list_display = ["user", "snoozed_by", "snoozed_at", "expires_at", "note"]
+    search_fields = ["user__profile__main_character__character_name", "note"]
+    readonly_fields = ["snoozed_at"]
 
 
 @admin.register(AuditLog)

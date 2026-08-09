@@ -342,6 +342,39 @@ class MemberLabelLog(models.Model):
         return f"{self.get_action_display()} {self.label} on {self.user}"
 
 
+class DashboardSnooze(models.Model):
+    """Suppress a member's issues from the HR dashboard issues table.
+
+    Global — one snooze hides the member for all HR viewers.
+    Expires automatically if expires_at is set; otherwise indefinite.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="hr_dashboard_snooze",
+    )
+    snoozed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="+",
+    )
+    snoozed_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Auto-clears after this date. Leave blank for indefinite.",
+    )
+    note = models.TextField(help_text="Reason for snoozing this member's warnings.")
+
+    class Meta:
+        verbose_name = "Dashboard — Snooze"
+        verbose_name_plural = "Dashboard — Snoozes"
+
+    def __str__(self):
+        return f"Snooze: {self.user}"
+
+
 class AuditLog(models.Model):
     ACTION_RANK_ASSIGNED  = "rank_assigned"
     ACTION_RANK_CHANGED   = "rank_changed"
