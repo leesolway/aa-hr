@@ -71,7 +71,7 @@ def get_current_rank(user):
 
 def _get_rank_ids_for_user_roles(user, field):
     """Return set of Rank PKs reachable via the user's roles for the given M2M field."""
-    ids = set(Role.objects.filter(role_assignments__user=user).values_list(field, flat=True))
+    ids = set(Role.objects.filter(assignments__user=user).values_list(field, flat=True))
     ids.discard(None)
     return ids
 
@@ -544,3 +544,40 @@ def prepare_members(config):
 
     members.sort(key=lambda m: m["main"].character_name)
     return members
+
+
+def get_main_left_corp_members(config):
+    """Return list of member dicts for users who have an alt in the home corp
+    but whose main character is not.
+
+    This identifies accounts where the registered main has left or been moved
+    out of the home corp while corp alts remain — an actionable membership issue.
+    Returns an empty list when home_corp is not configured.
+    """
+    if not config.aa_state or not config.home_corporation_id:
+        return []
+
+    home_corp_id = config.home_corporation_id
+
+    users = (
+        User.objects.filter(profile__state=config.aa_state)
+        .filter(profile__main_character__isnull=False)
+        .exclude(profile__main_character__corporation_id=home_corp_id)
+        .filter(character_ownerships__character__corporation_id=home_corp_id)
+        .distinct()
+        .select_related("profile__main_character")
+        .prefetch_related("hr_rank_assignments__rank")
+    )
+
+    results = []
+    for user in users:
+        main = user.profile.main_character
+        current = current_assignment_from_prefetch(user.hr_rank_assignments.all())
+        results.append({
+            "user": user,
+            "main": main,
+            "rank": current.rank if current else None,
+        })
+
+    results.sort(key=lambda m: m["main"].character_name)
+    return results

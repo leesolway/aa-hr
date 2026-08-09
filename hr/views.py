@@ -24,6 +24,7 @@ from .services import (
     get_current_rank,
     get_effective_assignable_ranks,
     get_effective_removable_rank_ids,
+    get_main_left_corp_members,
     get_member_status,
     prepare_members,
     remove_label,
@@ -122,6 +123,7 @@ def dashboard(request):
 
     has_snoozed = bool(snoozed_ids & {m["user"].pk for m in all_issue_members})
     unregistered_count = _unregistered_chars_qs(config.aa_state).count()
+    departed_members = get_main_left_corp_members(config)
 
     return render(request, "hr/dashboard.html", {
         "state": config.aa_state,
@@ -130,6 +132,8 @@ def dashboard(request):
         "title_mismatches": mismatches,
         "audit_issues": audit_issues,
         "issue_members": issue_members,
+        "departed_members": departed_members,
+        "departed_count": len(departed_members),
         "show_snoozed": show_snoozed,
         "has_snoozed": has_snoozed,
         "unregistered_count": unregistered_count,

@@ -75,6 +75,18 @@
                 </div>
             </a>
         </div>
+        {% if departed_count %}
+        <div class="col-sm-6 col-xl-3">
+            <a href="#departed-members" class="text-decoration-none">
+                <div class="card h-100 border-warning">
+                    <div class="card-body text-center">
+                        <div class="text-muted small text-uppercase">{% trans "Main Left Corp" %}</div>
+                        <div class="fs-2 fw-bold text-warning">{{ departed_count }}</div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endif %}
     </div>
 
     {% if issue_members %}
@@ -193,6 +205,67 @@
         <div class="card-body text-center text-muted py-5">
             <i class="fa-solid fa-circle-check fa-3x mb-3 text-success"></i>
             <p class="mb-0">{% trans "No issues found." %}</p>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if departed_members %}
+    <div class="card border-warning mt-3" id="departed-members">
+        <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+            <span>
+                <i class="fa-solid fa-right-from-bracket me-1"></i>
+                {% trans "Main Character Left Home Corp" %}
+            </span>
+            <span class="badge bg-dark">{{ departed_count }}</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th style="width:40px;"></th>
+                            <th>{% trans "Member" %}</th>
+                            <th>{% trans "Current Corporation" %}</th>
+                            <th>{% trans "Rank" %}</th>
+                            <th style="width:80px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in departed_members %}
+                        <tr style="cursor:pointer;" onclick="window.location='{% url 'hr:member_detail' m.user.pk %}'">
+                            <td>
+                                <img src="{% eve_image 'character' m.main.character_id 32 %}"
+                                     class="rounded" width="32" height="32" loading="lazy"
+                                     alt="{{ m.main.character_name }}">
+                            </td>
+                            <td>
+                                <a href="{% url 'hr:member_detail' m.user.pk %}" onclick="event.stopPropagation();">
+                                    {{ m.main.character_name }}
+                                </a>
+                            </td>
+                            <td>
+                                <img src="{% eve_image 'corporation' m.main.corporation_id 32 %}"
+                                     class="rounded me-1" width="20" height="20" loading="lazy"
+                                     alt="{{ m.main.corporation_name }}">
+                                {{ m.main.corporation_name }}
+                            </td>
+                            <td>
+                                {% if m.rank %}
+                                <span class="badge bg-info">{{ m.rank }}</span>
+                                {% else %}
+                                <span class="text-muted">{% trans "No rank" %}</span>
+                                {% endif %}
+                            </td>
+                            <td onclick="event.stopPropagation();">
+                                <a href="{% url 'hr:member_detail' m.user.pk %}" class="btn btn-sm btn-outline-secondary">
+                                    {% trans "Manage" %}
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
     {% endif %}
