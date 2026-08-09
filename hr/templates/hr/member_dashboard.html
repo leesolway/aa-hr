@@ -58,6 +58,7 @@
             <div class="card mb-3">
                 <div class="card-header"><h6 class="mb-0">{% trans "Status" %}</h6></div>
                 <ul class="list-group list-group-flush">
+                    {% get_status_choices as status_choices %}
                     {% for value, label in status_choices %}
                     <li class="list-group-item d-flex align-items-center gap-3">
                         <form method="post" action="{% url 'hr:self_set_status' %}" class="flex-shrink-0">

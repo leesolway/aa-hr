@@ -148,6 +148,7 @@
                         <div class="mb-3">
                             <label class="form-label fw-semibold" for="status-select">{% trans "Status" %}</label>
                             <select id="status-select" name="status" class="form-select">
+                                {% get_status_choices as status_choices %}
                                 {% for value, label in status_choices %}
                                 <option value="{{ value }}"
                                     {% if current_status_assignment and current_status_assignment.status == value %}selected
@@ -297,6 +298,60 @@
             </div>
         </div>
         {% endif %}
+
+        {% for role, chars in role_title_mismatches %}
+        <div class="col-lg-4 mb-3">
+            <div class="card border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0">
+                        <i class="fa-solid fa-triangle-exclamation"></i> {% trans "Role Title Missing" %}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="mb-1">
+                        <strong>{% trans "Role:" %}</strong> {{ role.name }}<br>
+                        <strong>{% trans "Expected title:" %}</strong> <code>{{ role.corp_title.title }}</code>
+                    </p>
+                    <ul class="list-unstyled mb-0 mt-2">
+                        {% for char in chars %}
+                        <li>
+                            <img src="{% eve_image 'character' char.character_id 32 %}"
+                                 class="rounded me-1" width="20" height="20" loading="lazy"
+                                 alt="{{ char.character_name }}">
+                            {{ char.character_name }}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        {% for role, chars in stale_role_title_chars %}
+        <div class="col-lg-4 mb-3">
+            <div class="card border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0">
+                        <i class="fa-solid fa-triangle-exclamation"></i> {% trans "Unattained Role Title" %}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="mb-1 text-warning">{% blocktrans with name=role.name %}Character has the title for <strong>{{ name }}</strong> but does not hold this role.{% endblocktrans %}</p>
+                    <p class="mb-1"><strong>{% trans "Title:" %}</strong> <code>{{ role.corp_title.title }}</code></p>
+                    <ul class="list-unstyled mb-0 mt-2">
+                        {% for char in chars %}
+                        <li>
+                            <img src="{% eve_image 'character' char.character_id 32 %}"
+                                 class="rounded me-1" width="20" height="20" loading="lazy"
+                                 alt="{{ char.character_name }}">
+                            {{ char.character_name }}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
 
         {% if audit_issue_chars %}
         <div class="col-lg-4 mb-3">

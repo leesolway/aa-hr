@@ -14,6 +14,9 @@ from allianceauth.eveonline.models import EveCharacter
 
 from .models import AuditLog, DashboardSnooze, HrConfiguration, LabelCategory, MemberLabel, MemberStatusAssignment, Role, RoleAssignment, Rank
 from .services import (
+    _build_alts,
+    _current_assignment_from_prefetch,
+    _get_member_status,
     assign_label,
     assign_rank,
     assign_role,
@@ -30,6 +33,23 @@ from .services import (
 )
 
 User = get_user_model()
+
+
+def _label_category_qs(member_assignable_only=False):
+    """Return (label_categories qs, uncategorised_labels qs) for use in views."""
+    label_filters = {"labels__is_active": True}
+    uncategorised_filters = {"is_active": True, "category__isnull": True}
+    if member_assignable_only:
+        label_filters["labels__member_assignable"] = True
+        uncategorised_filters["member_assignable"] = True
+    label_categories = (
+        LabelCategory.objects.prefetch_related("labels")
+        .filter(**label_filters)
+        .distinct()
+        .order_by("display_order", "name")
+    )
+    uncategorised_labels = MemberLabel.objects.filter(**uncategorised_filters)
+    return label_categories, uncategorised_labels
 
 
 def _has_any_role(user):
@@ -75,6 +95,8 @@ def dashboard(request):
             or m["stale_title_chars"]
             or (not m["rank"] and not m["rank_removed_by_status"])
             or m["has_audit_issue"]
+            or m["has_role_title_mismatch"]
+            or m["has_stale_role_title"]
         )
 
     def _not_snoozed(m):
@@ -181,14 +203,13 @@ def member_detail(request, user_id):
             "hr_rank_assignments__rank__auth_group",
             "hr_rank_assignments__rank__corp_title",
             "hr_rank_assignments__assigned_by__profile__main_character",
+            "role_assignments__role__corp_title",
             "hr_label_assignments__label__category",
         ),
         pk=user_id,
     )
 
-    current_assignment = next(
-        (a for a in member_user.hr_rank_assignments.all() if a.is_current), None
-    )
+    current_assignment = _current_assignment_from_prefetch(member_user.hr_rank_assignments.all())
     current_rank = current_assignment.rank if current_assignment else None
 
     assignable_ranks = get_effective_assignable_ranks(request.user)
@@ -208,29 +229,15 @@ def member_detail(request, user_id):
 
     audit_entries = AuditLog.objects.filter(user=member_user).select_related(
         "performed_by__profile__main_character",
-        "old_rank", "new_rank", "label",
+        "old_rank", "new_rank", "label", "role",
     )
     audit_page = Paginator(audit_entries, 25).get_page(request.GET.get("audit_page"))
 
     main = getattr(member_user.profile, "main_character", None)
-    alts = []
-    if main:
-        alts = [
-            o.character
-            for o in member_user.character_ownerships.all()
-            if o.character and o.character.character_id != main.character_id
-        ]
-
-    status_choices = MemberStatusAssignment.STATUS_CHOICES
+    alts = _build_alts(member_user, main) if main else []
 
     current_label_ids = {a.label_id for a in member_user.hr_label_assignments.all()}
-    label_categories = (
-        LabelCategory.objects.prefetch_related("labels")
-        .filter(labels__is_active=True)
-        .distinct()
-        .order_by("display_order", "name")
-    )
-    uncategorised_labels = MemberLabel.objects.filter(is_active=True, category__isnull=True)
+    label_categories, uncategorised_labels = _label_category_qs()
 
     try:
         teamspeak3_user = member_user.teamspeak3
@@ -255,12 +262,13 @@ def member_detail(request, user_id):
         "missing_title_chars": alerts["missing_title_chars"],
         "stale_title_chars": alerts["stale_title_chars"],
         "audit_issue_chars": alerts["audit_issue_chars"],
+        "role_title_mismatches": alerts["role_title_mismatches"],
+        "stale_role_title_chars": alerts["stale_role_title_chars"],
         "current_status_assignment": alerts["member_status"],
         "assignable_ranks": assignable_ranks,
         "can_assign": can_assign,
         "can_remove": can_remove,
         "audit_page": audit_page,
-        "status_choices": status_choices,
         "current_label_ids": current_label_ids,
         "label_categories": label_categories,
         "uncategorised_labels": uncategorised_labels,
@@ -272,10 +280,8 @@ def member_detail(request, user_id):
 
 @login_required
 @permission_required("hr.access_hr")
+@require_POST
 def set_rank(request, user_id):
-    if request.method != "POST":
-        return redirect("hr:member_detail", user_id=user_id)
-
     member_user = get_object_or_404(User, pk=user_id)
     rank_id = request.POST.get("rank_id", "").strip()
     notes = request.POST.get("notes", "").strip()
@@ -311,10 +317,8 @@ def set_rank(request, user_id):
 
 @login_required
 @permission_required("hr.access_hr")
+@require_POST
 def set_status(request, user_id):
-    if request.method != "POST":
-        return redirect("hr:member_detail", user_id=user_id)
-
     if not (_has_any_role(request.user) or request.user.is_superuser):
         return HttpResponseForbidden("You do not have an HR role.")
 
@@ -335,7 +339,7 @@ def set_status(request, user_id):
             messages.info(request, f"{member_user} had no active status.")
     else:
         set_member_status(member_user, status=status, set_by=request.user, notes=notes)
-        messages.success(request, f"{member_user} status set to '{MemberStatusAssignment(status=status).get_status_display()}'.")
+        messages.success(request, f"{member_user} status set to '{dict(MemberStatusAssignment.STATUS_CHOICES)[status]}'.")
 
     return redirect("hr:member_detail", user_id=user_id)
 
@@ -357,26 +361,13 @@ def member_dashboard(request):
     )
     current_rank = current_assignment.rank if current_assignment else None
 
-    try:
-        current_status_assignment = user.hr_member_status
-    except Exception:
-        current_status_assignment = None
+    current_status_assignment = _get_member_status(user)
 
     current_label_ids = set(
         user.hr_label_assignments.values_list("label_id", flat=True)
     )
 
-    label_categories = (
-        LabelCategory.objects.prefetch_related("labels")
-        .filter(labels__is_active=True, labels__member_assignable=True)
-        .distinct()
-        .order_by("display_order", "name")
-    )
-    uncategorised_labels = MemberLabel.objects.filter(
-        is_active=True, member_assignable=True, category__isnull=True
-    )
-
-    status_choices = MemberStatusAssignment.STATUS_CHOICES
+    label_categories, uncategorised_labels = _label_category_qs(member_assignable_only=True)
 
     try:
         main = user.profile.main_character
@@ -428,7 +419,6 @@ def member_dashboard(request):
         "main": main,
         "current_rank": current_rank,
         "current_status_assignment": current_status_assignment,
-        "status_choices": status_choices,
         "current_label_ids": current_label_ids,
         "label_categories": label_categories,
         "uncategorised_labels": uncategorised_labels,
@@ -442,11 +432,9 @@ def member_dashboard(request):
 
 @login_required
 @permission_required("hr.member_access")
+@require_POST
 def self_set_status(request):
     """Members set or clear a member_assignable status on themselves."""
-    if request.method != "POST":
-        return redirect("hr:me")
-
     status = request.POST.get("status", "").strip()
     if status not in {v for v, _ in MemberStatusAssignment.STATUS_CHOICES}:
         messages.error(request, "Invalid status.")
@@ -457,18 +445,16 @@ def self_set_status(request):
         messages.success(request, "Your status has been cleared.")
     else:
         set_member_status(request.user, status=status, set_by=request.user, notes="")
-        messages.success(request, f"Your status has been set to '{MemberStatusAssignment(status=status).get_status_display()}'.")
+        messages.success(request, f"Your status has been set to '{dict(MemberStatusAssignment.STATUS_CHOICES)[status]}'.")
 
     return redirect("hr:me")
 
 
 @login_required
 @permission_required("hr.member_access")
+@require_POST
 def self_assign_label(request, label_id):
     """Members toggle a member_assignable label on themselves."""
-    if request.method != "POST":
-        return redirect("hr:me")
-
     label = get_object_or_404(MemberLabel, pk=label_id, is_active=True, member_assignable=True)
     action = request.POST.get("action", "").strip()
 
@@ -490,10 +476,8 @@ def self_assign_label(request, label_id):
 
 @login_required
 @permission_required("hr.access_hr")
+@require_POST
 def set_label(request, user_id):
-    if request.method != "POST":
-        return redirect("hr:member_detail", user_id=user_id)
-
     if not (_has_any_role(request.user) or request.user.is_superuser):
         return HttpResponseForbidden("You do not have an HR role.")
 
@@ -529,10 +513,8 @@ def set_label(request, user_id):
 
 @login_required
 @permission_required("hr.manage_roles")
+@require_POST
 def set_role(request, user_id):
-    if request.method != "POST":
-        return redirect("hr:member_detail", user_id=user_id)
-
     member_user = get_object_or_404(User, pk=user_id)
     action = request.POST.get("action", "").strip()
 
@@ -588,7 +570,7 @@ def unregistered(request):
     return render(request, "hr/unregistered.html", {
         "state": config.aa_state,
         "page_obj": page_obj,
-        "total": characters.count(),
+        "total": paginator.count,
         "search": search,
     })
 
@@ -642,7 +624,7 @@ def snooze_warning(request, user_id):
 
     if not note:
         messages.error(request, "A note is required when snoozing warnings.")
-        return redirect("hr:index")
+        return redirect("hr:member_detail", user_id=user_id)
 
     expires_at = None
     if expires_date:
@@ -651,7 +633,7 @@ def snooze_warning(request, user_id):
             expires_at = timezone.make_aware(datetime.combine(d, dt_time.max))
         except ValueError:
             messages.error(request, "Invalid expiry date.")
-            return redirect("hr:index")
+            return redirect("hr:member_detail", user_id=user_id)
 
     DashboardSnooze.objects.update_or_create(
         user=target_user,

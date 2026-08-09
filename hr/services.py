@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 
 from allianceauth.services.hooks import get_extension_logger
@@ -33,6 +34,28 @@ def _group_remove(user, group):
         user.groups.remove(group)
 
 
+def _current_assignment_from_prefetch(assignments):
+    """Return the current RankAssignment from a prefetched iterable, or None."""
+    return next((a for a in assignments if a.is_current), None)
+
+
+def _get_member_status(user):
+    """Return the user's MemberStatusAssignment, or None."""
+    try:
+        return user.hr_member_status
+    except ObjectDoesNotExist:
+        return None
+
+
+def _build_alts(user, main):
+    """Return list of non-main EveCharacters from the user's prefetched ownerships."""
+    return [
+        o.character
+        for o in user.character_ownerships.all()
+        if o.character and o.character.character_id != main.character_id
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Rank
 # ---------------------------------------------------------------------------
@@ -48,8 +71,7 @@ def get_current_rank(user):
 
 def _get_rank_ids_for_user_roles(user, field):
     """Return set of Rank PKs reachable via the user's roles for the given M2M field."""
-    role_ids = RoleAssignment.objects.filter(user=user).values_list("role_id", flat=True)
-    ids = set(Role.objects.filter(pk__in=role_ids).values_list(field, flat=True))
+    ids = set(Role.objects.filter(role_assignments__user=user).values_list(field, flat=True))
     ids.discard(None)
     return ids
 
@@ -341,27 +363,31 @@ def remove_label(user, label, performed_by, notes=""):
 # Member alerts / bulk member list
 # ---------------------------------------------------------------------------
 
-def compute_member_alerts(user, config):
+def compute_member_alerts(user, config, all_titled_roles=None):
     """Return alert dict for a single user.
 
-    Expects character_ownerships__character__characteraudit__characterroles__titles,
-    hr_rank_assignments__rank__corp_title, and hr_member_status__status to be
-    prefetched/select_related. Performs a single pass over character_ownerships.
+    Expects the following to be prefetched/select_related:
+      - character_ownerships__character__characteraudit__characterroles__titles
+      - hr_rank_assignments__rank__corp_title
+      - role_assignments__role__corp_title
+      - hr_member_status
 
+    all_titled_roles: optional pre-fetched list of all Role objects that have a
+    corp_title set. Pass this from prepare_members to avoid per-user queries.
+    If None, it is queried here (fine for single-user views).
+
+    Performs a single pass over character_ownerships.
     audit_issue_chars is a list of (char, "stale"|"missing") tuples.
     title_mismatch is suppressed (False) when the user is on any active status.
+    role_title_mismatches: list of (role, [chars_missing_title]) — roles held but title absent.
+    stale_role_title_chars: list of (role, [chars_with_title]) — title present but role not held.
     """
-    home_corp_id = config.home_corp.corporation_id if config.home_corp_id else None
+    home_corp_id = config.home_corporation_id
 
-    current_assignment = next(
-        (a for a in user.hr_rank_assignments.all() if a.is_current), None
-    )
+    current_assignment = _current_assignment_from_prefetch(user.hr_rank_assignments.all())
     rank = current_assignment.rank if current_assignment else None
 
-    try:
-        member_status = user.hr_member_status
-    except Exception:
-        member_status = None
+    member_status = _get_member_status(user)
     on_status = member_status.status if member_status else ""
     rank_removed_by_status = bool(on_status == MemberStatusAssignment.BREAK and not rank)
 
@@ -377,6 +403,29 @@ def compute_member_alerts(user, config):
         if prev_assignment and prev_assignment.rank.corp_title_id:
             prev_corp_id = prev_assignment.rank.corp_title.corporation_id
             prev_title = prev_assignment.rank.corp_title.title
+
+    # Roles this user currently holds
+    held_role_ids = {ra.role_id for ra in user.role_assignments.all()}
+
+    # Roles held by user that require a corp title — check characters have it
+    role_requirements = [
+        (ra.role, ra.role.corp_title.title, ra.role.corp_title.corporation_id)
+        for ra in user.role_assignments.all()
+        if ra.role.corp_title_id
+    ]
+    role_missing = {role: [] for role, _, _ in role_requirements}
+
+    # Roles NOT held by user that have a corp title — flag if character has it anyway
+    if all_titled_roles is None:
+        all_titled_roles = list(
+            Role.objects.filter(corp_title__isnull=False).select_related("corp_title")
+        )
+    unattained_role_requirements = [
+        (role, role.corp_title.title, role.corp_title.corporation_id)
+        for role in all_titled_roles
+        if role.pk not in held_role_ids
+    ]
+    stale_role_map = {role: [] for role, _, _ in unattained_role_requirements}
 
     missing_title_chars = []
     audit_issue_chars = []  # [(char, "stale"|"missing"), ...]
@@ -412,15 +461,30 @@ def compute_member_alerts(user, config):
             if prev_title in char_titles:
                 stale_title_chars.append(char)
 
+        for role, req_title, req_corp_id in role_requirements:
+            if char.corporation_id == req_corp_id and req_title not in char_titles:
+                role_missing[role].append(char)
+
+        for role, req_title, req_corp_id in unattained_role_requirements:
+            if char.corporation_id == req_corp_id and req_title in char_titles:
+                stale_role_map[role].append(char)
+
+    role_title_mismatches = [(role, chars) for role, chars in role_missing.items() if chars]
+    stale_role_title_chars = [(role, chars) for role, chars in stale_role_map.items() if chars]
+
     return {
         "rank": rank,
-        "title_mismatch": bool(missing_title_chars) and not on_status,  # suppressed when on any status
+        "title_mismatch": bool(missing_title_chars) and on_status not in {MemberStatusAssignment.AWAY, MemberStatusAssignment.BREAK},
         "missing_title_chars": missing_title_chars,
         "stale_title_chars": stale_title_chars,
         "audit_issue_chars": audit_issue_chars,
         "has_audit_issue": bool(audit_issue_chars),
         "member_status": member_status,
         "rank_removed_by_status": rank_removed_by_status,
+        "role_title_mismatches": role_title_mismatches,
+        "has_role_title_mismatch": bool(role_title_mismatches),
+        "stale_role_title_chars": stale_role_title_chars,
+        "has_stale_role_title": bool(stale_role_title_chars),
     }
 
 
@@ -434,7 +498,7 @@ def prepare_members(config):
     if not config.aa_state:
         return []
 
-    home_corp_id = config.home_corp.corporation_id if config.home_corp_id else None
+    home_corp_id = config.home_corporation_id
 
     users = (
         User.objects.filter(profile__state=config.aa_state)
@@ -442,12 +506,18 @@ def prepare_members(config):
         .prefetch_related(
             "character_ownerships__character__characteraudit__characterroles__titles",
             "hr_rank_assignments__rank__corp_title",
+            "role_assignments__role__corp_title",
             "hr_label_assignments__label",
         )
     )
 
     if home_corp_id:
         users = users.filter(profile__main_character__corporation_id=home_corp_id)
+
+    # Fetch once — passed to each compute_member_alerts call to avoid per-user queries
+    all_titled_roles = list(
+        Role.objects.filter(corp_title__isnull=False).select_related("corp_title")
+    )
 
     members = []
     for user in users:
@@ -458,13 +528,9 @@ def prepare_members(config):
         if not main:
             continue
 
-        alts = [
-            o.character
-            for o in user.character_ownerships.all()
-            if o.character and o.character.character_id != main.character_id
-        ]
+        alts = _build_alts(user, main)
 
-        alerts = compute_member_alerts(user, config)
+        alerts = compute_member_alerts(user, config, all_titled_roles=all_titled_roles)
         labels = [a.label for a in user.hr_label_assignments.all()]
 
         members.append({

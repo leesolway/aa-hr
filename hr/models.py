@@ -51,6 +51,11 @@ class HrConfiguration(SingletonModel):
             ("manage_roles", "Can assign roles to users"),
         ]
 
+    @property
+    def home_corporation_id(self):
+        """The corporation_id of home_corp, or None if not set."""
+        return self.home_corp.corporation_id if self.home_corp_id else None
+
     def __str__(self):
         return "HR Configuration"
 
@@ -127,6 +132,14 @@ class Role(models.Model):
         blank=True,
         related_name="hr_role",
     )
+    corp_title = models.ForeignKey(
+        "corptools.CharacterTitle",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="hr_roles",
+        help_text="EVE title that members holding this role should have on all characters.",
+    )
     can_assign = models.ManyToManyField(
         Rank, blank=True, related_name="assignable_by_roles"
     )
@@ -170,7 +183,17 @@ class RoleAssignment(models.Model):
 
 
 class MemberStatusAssignment(models.Model):
-    """Active status for a user. Absent means the user is normal/active."""
+    """Status record for a user.
+
+    ACTIVE is the default and represents normal/active state. A row with
+    status='active' and an absent row are treated identically — the member
+    is considered active. Views map an 'active' submission to
+    clear_member_status(), which deletes the row to normalise state, but if
+    an 'active' row persists (e.g. created via admin) all service and
+    display logic handles it correctly. AWAY and BREAK add the member to a
+    status group and suppress dashboard title-mismatch alerts. BREAK
+    additionally removes rank and all role assignments.
+    """
 
     ACTIVE = "active"
     AWAY = "away"
@@ -189,7 +212,7 @@ class MemberStatusAssignment(models.Model):
         on_delete=models.CASCADE,
         related_name="hr_member_status",
     )
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=ACTIVE)
     set_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

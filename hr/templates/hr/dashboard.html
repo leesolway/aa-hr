@@ -143,6 +143,16 @@
                                     <i class="fa-solid fa-database"></i> {% trans "Audit issue" %}
                                 </span>
                                 {% endif %}
+                                {% if member.has_role_title_mismatch %}
+                                <span class="badge bg-warning text-dark">
+                                    <i class="fa-solid fa-triangle-exclamation"></i> {% trans "Role title missing" %}
+                                </span>
+                                {% endif %}
+                                {% if member.has_stale_role_title %}
+                                <span class="badge bg-warning text-dark">
+                                    <i class="fa-solid fa-triangle-exclamation"></i> {% trans "Unattained role title" %}
+                                </span>
+                                {% endif %}
                                 {% if member.snooze %}
                                 <span class="badge bg-secondary ms-1"
                                       title="{{ member.snooze.note }}{% if member.snooze.expires_at %} · {% trans 'until' %} {{ member.snooze.expires_at|date:'Y-m-d' }}{% endif %}"

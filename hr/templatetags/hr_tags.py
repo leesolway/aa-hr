@@ -30,3 +30,10 @@ def evewho_url(character_id):
 def is_in(value, collection):
     """Return True if value is in collection. Usage: {{ pk|is_in:current_label_ids }}"""
     return value in collection
+
+
+@register.simple_tag
+def get_status_choices():
+    """Return MemberStatusAssignment.STATUS_CHOICES for use in templates."""
+    from hr.models import MemberStatusAssignment
+    return MemberStatusAssignment.STATUS_CHOICES

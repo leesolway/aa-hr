@@ -31,7 +31,7 @@ class HrConfigurationAdmin(admin.ModelAdmin):
             self.message_user(request, "No state configured in HR Configuration.", level="error")
             return
 
-        home_corp_id = config.home_corp.corporation_id if config.home_corp_id else None
+        home_corp_id = config.home_corporation_id
 
         users = (
             User.objects.filter(profile__state=config.aa_state)
@@ -101,7 +101,7 @@ class AuditLogAdmin(admin.ModelAdmin):
     search_fields = ["user__profile__main_character__character_name"]
     readonly_fields = [
         "timestamp", "action", "user", "performed_by", "notes",
-        "old_rank", "new_rank", "old_status", "new_status", "label",
+        "old_rank", "new_rank", "old_status", "new_status", "label", "role",
     ]
 
     def has_add_permission(self, request):
@@ -189,11 +189,8 @@ class MemberLabelAssignmentAdmin(admin.ModelAdmin):
     readonly_fields = ["assigned_at"]
 
 
-@admin.register(Rank)
-class RankAdmin(admin.ModelAdmin):
-    list_display = ["name", "priority", "auth_group", "corp_title", "is_active"]
-    list_editable = ["priority", "is_active"]
-    ordering = ["priority"]
+class CorpTitleFieldMixin:
+    """Filter the corp_title FK dropdown by home corp or aa_state."""
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "corp_title":
@@ -218,6 +215,13 @@ class RankAdmin(admin.ModelAdmin):
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
+@admin.register(Rank)
+class RankAdmin(CorpTitleFieldMixin, admin.ModelAdmin):
+    list_display = ["name", "priority", "auth_group", "corp_title", "is_active"]
+    list_editable = ["priority", "is_active"]
+    ordering = ["priority"]
+
+
 @admin.register(RankAssignment)
 class RankAssignmentAdmin(admin.ModelAdmin):
     list_display = ["user", "rank", "is_current", "assigned_by", "assigned_at"]
@@ -227,8 +231,8 @@ class RankAssignmentAdmin(admin.ModelAdmin):
 
 
 @admin.register(Role)
-class RoleAdmin(admin.ModelAdmin):
-    list_display = ["name"]
+class RoleAdmin(CorpTitleFieldMixin, admin.ModelAdmin):
+    list_display = ["name", "auth_group", "corp_title"]
     filter_horizontal = ["can_assign", "can_remove"]
 
 
