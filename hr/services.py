@@ -19,6 +19,24 @@ logger = get_extension_logger(__name__)
 User = get_user_model()
 
 
+# ---------------------------------------------------------------------------
+# Internal group sync helpers
+# ---------------------------------------------------------------------------
+
+def _group_add(user, group):
+    if group:
+        user.groups.add(group)
+
+
+def _group_remove(user, group):
+    if group:
+        user.groups.remove(group)
+
+
+# ---------------------------------------------------------------------------
+# Rank
+# ---------------------------------------------------------------------------
+
 def get_current_rank(user):
     """Return the user's current RankAssignment, or None."""
     return (
@@ -65,8 +83,7 @@ def assign_rank(user, rank, assigned_by, notes=""):
         old_rank = None
         if existing:
             old_rank = existing.rank
-            if old_rank.auth_group:
-                user.groups.remove(old_rank.auth_group)
+            _group_remove(user, old_rank.auth_group)
             existing.is_current = False
             existing.save(update_fields=["is_current"])
 
@@ -78,8 +95,7 @@ def assign_rank(user, rank, assigned_by, notes=""):
             is_current=True,
         )
 
-        if rank.auth_group:
-            user.groups.add(rank.auth_group)
+        _group_add(user, rank.auth_group)
 
         action = AuditLog.ACTION_RANK_CHANGED if old_rank else AuditLog.ACTION_RANK_ASSIGNED
         AuditLog.objects.create(
@@ -113,8 +129,7 @@ def remove_rank(user, performed_by, notes=""):
         existing.is_current = False
         existing.save(update_fields=["is_current"])
 
-        if old_rank.auth_group:
-            user.groups.remove(old_rank.auth_group)
+        _group_remove(user, old_rank.auth_group)
 
         AuditLog.objects.create(
             action=AuditLog.ACTION_RANK_REMOVED,
@@ -126,6 +141,63 @@ def remove_rank(user, performed_by, notes=""):
 
     return True
 
+
+# ---------------------------------------------------------------------------
+# Role
+# ---------------------------------------------------------------------------
+
+def assign_role(user, role, assigned_by):
+    """Assign a role to a user. Idempotent — returns (assignment, created).
+
+    Adds the user to role.auth_group if set and writes an audit log entry.
+    """
+    with transaction.atomic():
+        assignment, created = RoleAssignment.objects.get_or_create(
+            user=user,
+            role=role,
+            defaults={"assigned_by": assigned_by},
+        )
+        if not created:
+            return assignment, False
+
+        _group_add(user, role.auth_group)
+
+        AuditLog.objects.create(
+            action=AuditLog.ACTION_ROLE_ASSIGNED,
+            user=user,
+            performed_by=assigned_by,
+            role=role,
+        )
+
+    return assignment, True
+
+
+def remove_role(user, role, performed_by):
+    """Remove a role from a user.
+
+    Returns True if removed, False if the user did not hold the role.
+    Removes the user from role.auth_group and writes an audit log entry.
+    """
+    with transaction.atomic():
+        deleted, _ = RoleAssignment.objects.filter(user=user, role=role).delete()
+        if not deleted:
+            return False
+
+        _group_remove(user, role.auth_group)
+
+        AuditLog.objects.create(
+            action=AuditLog.ACTION_ROLE_REMOVED,
+            user=user,
+            performed_by=performed_by,
+            role=role,
+        )
+
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Member status
+# ---------------------------------------------------------------------------
 
 def _status_auth_group(config, status):
     """Return the AA Group for the given status string, or None."""
@@ -151,8 +223,7 @@ def set_member_status(user, status, set_by, notes=""):
 
         if old_assignment:
             old_group = _status_auth_group(config, old_status)
-            if old_group:
-                user.groups.remove(old_group)
+            _group_remove(user, old_group)
             old_assignment.delete()
 
         MemberStatusAssignment.objects.create(
@@ -162,8 +233,7 @@ def set_member_status(user, status, set_by, notes=""):
             notes=notes,
         )
 
-        if new_group:
-            user.groups.add(new_group)
+        _group_add(user, new_group)
 
         AuditLog.objects.create(
             action=AuditLog.ACTION_STATUS_SET,
@@ -180,14 +250,11 @@ def set_member_status(user, status, set_by, notes=""):
                 performed_by=set_by,
                 notes=f"Rank removed: status set to '{status}'",
             )
-            removed_count, _ = RoleAssignment.objects.filter(user=user).delete()
-            if removed_count:
-                AuditLog.objects.create(
-                    action=AuditLog.ACTION_ROLES_CLEARED,
-                    user=user,
-                    performed_by=set_by,
-                    notes=f"{removed_count} role(s) cleared: status set to '{status}'",
-                )
+            role_assignments = list(
+                RoleAssignment.objects.filter(user=user).select_related("role__auth_group")
+            )
+            for ra in role_assignments:
+                remove_role(user, ra.role, performed_by=set_by)
 
 
 def clear_member_status(user, set_by, notes=""):
@@ -200,9 +267,7 @@ def clear_member_status(user, set_by, notes=""):
             return False
 
         old_status = assignment.status
-        old_group = _status_auth_group(config, old_status)
-        if old_group:
-            user.groups.remove(old_group)
+        _group_remove(user, _status_auth_group(config, old_status))
         assignment.delete()
 
         AuditLog.objects.create(
@@ -215,6 +280,10 @@ def clear_member_status(user, set_by, notes=""):
 
     return True
 
+
+# ---------------------------------------------------------------------------
+# Labels
+# ---------------------------------------------------------------------------
 
 def assign_label(user, label, assigned_by, notes=""):
     """Assign a label to a user and add them to the label's AA group (if any).
@@ -230,8 +299,7 @@ def assign_label(user, label, assigned_by, notes=""):
         if not created:
             return assignment
 
-        if label.auth_group:
-            user.groups.add(label.auth_group)
+        _group_add(user, label.auth_group)
 
         AuditLog.objects.create(
             action=AuditLog.ACTION_LABEL_ASSIGNED,
@@ -256,8 +324,7 @@ def remove_label(user, label, performed_by, notes=""):
         if not deleted:
             return False
 
-        if label.auth_group:
-            user.groups.remove(label.auth_group)
+        _group_remove(user, label.auth_group)
 
         AuditLog.objects.create(
             action=AuditLog.ACTION_LABEL_REMOVED,
@@ -269,6 +336,10 @@ def remove_label(user, label, performed_by, notes=""):
 
     return True
 
+
+# ---------------------------------------------------------------------------
+# Member alerts / bulk member list
+# ---------------------------------------------------------------------------
 
 def compute_member_alerts(user, config):
     """Return alert dict for a single user.

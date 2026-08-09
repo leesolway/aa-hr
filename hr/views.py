@@ -16,6 +16,7 @@ from .models import AuditLog, DashboardSnooze, HrConfiguration, LabelCategory, M
 from .services import (
     assign_label,
     assign_rank,
+    assign_role,
     clear_member_status,
     compute_member_alerts,
     get_current_rank,
@@ -24,6 +25,7 @@ from .services import (
     prepare_members,
     remove_label,
     remove_rank,
+    remove_role,
     set_member_status,
 )
 
@@ -538,18 +540,18 @@ def set_role(request, user_id):
         role_id = request.POST.get("role_id", "").strip()
         if role_id.isdigit():
             role = get_object_or_404(Role, pk=int(role_id))
-            RoleAssignment.objects.get_or_create(
-                user=member_user,
-                role=role,
-                defaults={"assigned_by": request.user},
-            )
-            messages.success(request, f"Role '{role}' assigned to {member_user}.")
+            _, created = assign_role(member_user, role, assigned_by=request.user)
+            if created:
+                messages.success(request, f"Role '{role}' assigned to {member_user}.")
+            else:
+                messages.info(request, f"{member_user} already holds role '{role}'.")
         else:
             messages.error(request, "Invalid role.")
     elif action == "remove":
         assignment_id = request.POST.get("assignment_id", "").strip()
         if assignment_id.isdigit():
-            RoleAssignment.objects.filter(pk=int(assignment_id), user=member_user).delete()
+            assignment = get_object_or_404(RoleAssignment, pk=int(assignment_id), user=member_user)
+            remove_role(member_user, assignment.role, performed_by=request.user)
             messages.success(request, "Role removed.")
         else:
             messages.error(request, "Invalid assignment.")

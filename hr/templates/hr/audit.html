@@ -61,8 +61,10 @@
                                 <span class="badge bg-primary">{% trans "Label assigned" %}</span>
                                 {% elif entry.action == 'label_removed' %}
                                 <span class="badge bg-secondary">{% trans "Label removed" %}</span>
-                                {% elif entry.action == 'roles_cleared' %}
-                                <span class="badge bg-danger">{% trans "Roles cleared" %}</span>
+                                {% elif entry.action == 'role_assigned' %}
+                                <span class="badge bg-success">{% trans "Role assigned" %}</span>
+                                {% elif entry.action == 'role_removed' %}
+                                <span class="badge bg-danger">{% trans "Role removed" %}</span>
                                 {% else %}
                                 <span class="badge bg-secondary">{{ entry.action }}</span>
                                 {% endif %}
@@ -96,6 +98,10 @@
                                 {% elif entry.action == 'label_assigned' or entry.action == 'label_removed' %}
                                 {% if entry.label %}
                                 <span class="badge bg-light text-dark border">{{ entry.label.name }}</span>
+                                {% endif %}
+                                {% elif entry.action == 'role_assigned' or entry.action == 'role_removed' %}
+                                {% if entry.role %}
+                                <span class="badge bg-light text-dark border">{{ entry.role.name }}</span>
                                 {% endif %}
                                 {% else %}
                                 <span class="text-muted">—</span>

@@ -120,6 +120,13 @@ class RankAssignment(models.Model):
 
 class Role(models.Model):
     name = models.CharField(max_length=100)
+    auth_group = models.OneToOneField(
+        "auth.Group",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="hr_role",
+    )
     can_assign = models.ManyToManyField(
         Rank, blank=True, related_name="assignable_by_roles"
     )
@@ -166,12 +173,12 @@ class MemberStatusAssignment(models.Model):
     """Active status for a user. Absent means the user is normal/active."""
 
     ACTIVE = "active"
-    AWAY   = "away"
-    BREAK  = "break"
+    AWAY = "away"
+    BREAK = "break"
     STATUS_CHOICES = [
         (ACTIVE, "Active"),
-        (AWAY,   "Away"),
-        (BREAK,  "Break"),
+        (AWAY, "Away"),
+        (BREAK, "Break"),
     ]
 
     # Behaviour constants — no DB flags needed
@@ -199,7 +206,6 @@ class MemberStatusAssignment(models.Model):
 
     def __str__(self):
         return f"{self.user} — {self.get_status_display()}"
-
 
 
 class LabelCategory(models.Model):
@@ -295,53 +301,6 @@ class MemberLabelAssignment(models.Model):
         return f"{self.user} — {self.label}"
 
 
-class MemberLabelLog(models.Model):
-    """Immutable audit log for label assignments and removals."""
-
-    ACTION_ASSIGNED = "assigned"
-    ACTION_REMOVED = "removed"
-    ACTION_CHOICES = [
-        (ACTION_ASSIGNED, "Assigned"),
-        (ACTION_REMOVED, "Removed"),
-    ]
-
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="hr_label_log",
-    )
-    label = models.ForeignKey(
-        MemberLabel,
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name="+",
-    )
-    action = models.CharField(max_length=10, choices=ACTION_CHOICES)
-    performed_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="hr_label_log_actions",
-    )
-    timestamp = models.DateTimeField(auto_now_add=True)
-    notes = models.TextField(blank=True, default="")
-
-    class Meta:
-        ordering = ["-timestamp"]
-        verbose_name = "Label — Log Entry"
-        verbose_name_plural = "Label — Log"
-        indexes = [
-            models.Index(
-                fields=["user", "-timestamp"],
-                name="hr_labellog_user_ts_idx",
-            ),
-        ]
-
-    def __str__(self):
-        return f"{self.get_action_display()} {self.label} on {self.user}"
-
-
 class DashboardSnooze(models.Model):
     """Suppress a member's issues from the HR dashboard issues table.
 
@@ -357,12 +316,14 @@ class DashboardSnooze(models.Model):
     snoozed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         related_name="+",
     )
     snoozed_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         help_text="Auto-clears after this date. Leave blank for indefinite.",
     )
     note = models.TextField(help_text="Reason for snoozing this member's warnings.")
@@ -376,40 +337,51 @@ class DashboardSnooze(models.Model):
 
 
 class AuditLog(models.Model):
-    ACTION_RANK_ASSIGNED  = "rank_assigned"
-    ACTION_RANK_CHANGED   = "rank_changed"
-    ACTION_RANK_REMOVED   = "rank_removed"
-    ACTION_STATUS_SET     = "status_set"
+    ACTION_RANK_ASSIGNED = "rank_assigned"
+    ACTION_RANK_CHANGED = "rank_changed"
+    ACTION_RANK_REMOVED = "rank_removed"
+    ACTION_STATUS_SET = "status_set"
     ACTION_STATUS_CLEARED = "status_cleared"
     ACTION_LABEL_ASSIGNED = "label_assigned"
-    ACTION_LABEL_REMOVED  = "label_removed"
-    ACTION_ROLES_CLEARED  = "roles_cleared"
+    ACTION_LABEL_REMOVED = "label_removed"
+    ACTION_ROLE_ASSIGNED = "role_assigned"
+    ACTION_ROLE_REMOVED = "role_removed"
 
     ACTION_CHOICES = [
-        (ACTION_RANK_ASSIGNED,  "Rank assigned"),
-        (ACTION_RANK_CHANGED,   "Rank changed"),
-        (ACTION_RANK_REMOVED,   "Rank removed"),
-        (ACTION_STATUS_SET,     "Status set"),
+        (ACTION_RANK_ASSIGNED, "Rank assigned"),
+        (ACTION_RANK_CHANGED, "Rank changed"),
+        (ACTION_RANK_REMOVED, "Rank removed"),
+        (ACTION_STATUS_SET, "Status set"),
         (ACTION_STATUS_CLEARED, "Status cleared"),
         (ACTION_LABEL_ASSIGNED, "Label assigned"),
-        (ACTION_LABEL_REMOVED,  "Label removed"),
-        (ACTION_ROLES_CLEARED,  "Roles cleared"),
+        (ACTION_LABEL_REMOVED, "Label removed"),
+        (ACTION_ROLE_ASSIGNED, "Role assigned"),
+        (ACTION_ROLE_REMOVED, "Role removed"),
     ]
 
-    timestamp    = models.DateTimeField(auto_now_add=True)
-    action       = models.CharField(max_length=20, choices=ACTION_CHOICES)
-    user         = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="hr_audit_log",
+    timestamp = models.DateTimeField(auto_now_add=True)
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="hr_audit_log",
     )
     performed_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
-        null=True, blank=True, related_name="+",
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
     )
     notes = models.TextField(blank=True, default="")
 
     # Rank fields — populated for rank_* actions
-    old_rank = models.ForeignKey(Rank, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
-    new_rank = models.ForeignKey(Rank, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    old_rank = models.ForeignKey(
+        Rank, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    new_rank = models.ForeignKey(
+        Rank, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
 
     # Status fields — populated for status_* actions
     old_status = models.CharField(max_length=20, blank=True, default="")
@@ -417,7 +389,20 @@ class AuditLog(models.Model):
 
     # Label field — populated for label_* actions
     label = models.ForeignKey(
-        MemberLabel, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+        MemberLabel,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+
+    # Role field — populated for role_* actions
+    role = models.ForeignKey(
+        "Role",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
     )
 
     class Meta:

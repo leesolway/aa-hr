@@ -30,7 +30,7 @@ def remove_rank_on_state_loss(sender, user, state, **kwargs):
 
 @receiver(m2m_changed)
 def sync_group_removal(sender, instance, action, pk_set, **kwargs):
-    """When AA groups are removed from a user externally, clean up HR label/status assignments.
+    """When AA groups are removed from a user externally, clean up HR assignments.
 
     This keeps HR state consistent when groups are revoked outside the HR UI
     (e.g. via AA admin or another service).
@@ -43,8 +43,7 @@ def sync_group_removal(sender, instance, action, pk_set, **kwargs):
     if action != "post_remove" or not pk_set:
         return
 
-    from .models import MemberLabelAssignment, MemberStatusAssignment
-    from .models import MemberLabelLog
+    from .models import AuditLog, HrConfiguration, MemberLabelAssignment, MemberStatusAssignment, RoleAssignment
 
     # m2m_changed fires for both user.groups.remove() and group.user_set.remove().
     # When called from the group side (e.g. AA admin), instance is the Group and
@@ -52,7 +51,6 @@ def sync_group_removal(sender, instance, action, pk_set, **kwargs):
     if isinstance(instance, User):
         user_group_pairs = [(instance, pk_set)]
     else:
-        # instance is a Group; pk_set is a set of User PKs
         group_pk_set = {instance.pk}
         user_group_pairs = [
             (user, group_pk_set)
@@ -70,12 +68,12 @@ def sync_group_removal(sender, instance, action, pk_set, **kwargs):
         if affected_labels:
             label_ids = [a.label_id for a in affected_labels]
             MemberLabelAssignment.objects.filter(user=user, label_id__in=label_ids).delete()
-            MemberLabelLog.objects.bulk_create([
-                MemberLabelLog(
+            AuditLog.objects.bulk_create([
+                AuditLog(
+                    action=AuditLog.ACTION_LABEL_REMOVED,
                     user=user,
-                    label=a.label,
-                    action=MemberLabelLog.ACTION_REMOVED,
                     performed_by=None,
+                    label=a.label,
                     notes="Automatic removal: group revoked externally",
                 )
                 for a in affected_labels
@@ -86,7 +84,6 @@ def sync_group_removal(sender, instance, action, pk_set, **kwargs):
             )
 
         # Clear status if its group was revoked externally
-        from .models import AuditLog, HrConfiguration, MemberStatusAssignment
         config = HrConfiguration.get_solo()
         status_to_clear = None
         if config.break_auth_group_id and config.break_auth_group_id in group_pk_set:
@@ -110,3 +107,28 @@ def sync_group_removal(sender, instance, action, pk_set, **kwargs):
                     "Cleared status '%s' from %s due to external group removal",
                     status_to_clear, user,
                 )
+
+        # Remove role assignments whose group was revoked externally
+        affected_roles = list(
+            RoleAssignment.objects.filter(
+                user=user,
+                role__auth_group__in=group_pk_set,
+            ).select_related("role")
+        )
+        if affected_roles:
+            role_ids = [ra.role_id for ra in affected_roles]
+            RoleAssignment.objects.filter(user=user, role_id__in=role_ids).delete()
+            AuditLog.objects.bulk_create([
+                AuditLog(
+                    action=AuditLog.ACTION_ROLE_REMOVED,
+                    user=user,
+                    performed_by=None,
+                    role=ra.role,
+                    notes="Automatic removal: group revoked externally",
+                )
+                for ra in affected_roles
+            ])
+            logger.info(
+                "Removed %d role assignment(s) from %s due to external group removal",
+                len(affected_roles), user,
+            )
