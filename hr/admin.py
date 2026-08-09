@@ -10,6 +10,7 @@ from .models import (
     LabelCategory,
     MemberLabel,
     MemberLabelAssignment,
+    MemberStatusAssignment,
     Rank,
     RankAssignment,
     Role,
@@ -71,7 +72,7 @@ class HrConfigurationAdmin(admin.ModelAdmin):
 
             rank = (
                 Rank.objects.filter(corp_title__in=title_pks, is_active=True)
-                .order_by("-priority")
+                .order_by("priority")
                 .first()
             )
             if not rank:
@@ -179,6 +180,14 @@ class MemberLabelAdmin(admin.ModelAdmin):
             request,
             "Sync complete: " + ", ".join(parts) + "." if parts else "Nothing to sync.",
         )
+
+
+@admin.register(MemberStatusAssignment)
+class MemberStatusAssignmentAdmin(admin.ModelAdmin):
+    list_display = ["user", "status", "set_by", "set_at"]
+    list_filter = ["status"]
+    search_fields = ["user__profile__main_character__character_name"]
+    readonly_fields = ["set_at"]
 
 
 @admin.register(MemberLabelAssignment)

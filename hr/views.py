@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -14,17 +14,17 @@ from allianceauth.eveonline.models import EveCharacter
 
 from .models import AuditLog, DashboardSnooze, HrConfiguration, LabelCategory, MemberLabel, MemberStatusAssignment, Role, RoleAssignment, Rank
 from .services import (
-    _build_alts,
-    _current_assignment_from_prefetch,
-    _get_member_status,
     assign_label,
     assign_rank,
     assign_role,
+    build_alts,
     clear_member_status,
     compute_member_alerts,
+    current_assignment_from_prefetch,
     get_current_rank,
     get_effective_assignable_ranks,
     get_effective_removable_rank_ids,
+    get_member_status,
     prepare_members,
     remove_label,
     remove_rank,
@@ -37,14 +37,18 @@ User = get_user_model()
 
 def _label_category_qs(member_assignable_only=False):
     """Return (label_categories qs, uncategorised_labels qs) for use in views."""
-    label_filters = {"labels__is_active": True}
+    label_qs_filters = {"is_active": True}
+    category_filters = {"labels__is_active": True}
     uncategorised_filters = {"is_active": True, "category__isnull": True}
     if member_assignable_only:
-        label_filters["labels__member_assignable"] = True
+        label_qs_filters["member_assignable"] = True
+        category_filters["labels__member_assignable"] = True
         uncategorised_filters["member_assignable"] = True
     label_categories = (
-        LabelCategory.objects.prefetch_related("labels")
-        .filter(**label_filters)
+        LabelCategory.objects.prefetch_related(
+            Prefetch("labels", queryset=MemberLabel.objects.filter(**label_qs_filters))
+        )
+        .filter(**category_filters)
         .distinct()
         .order_by("display_order", "name")
     )
@@ -209,7 +213,7 @@ def member_detail(request, user_id):
         pk=user_id,
     )
 
-    current_assignment = _current_assignment_from_prefetch(member_user.hr_rank_assignments.all())
+    current_assignment = current_assignment_from_prefetch(member_user.hr_rank_assignments.all())
     current_rank = current_assignment.rank if current_assignment else None
 
     assignable_ranks = get_effective_assignable_ranks(request.user)
@@ -234,7 +238,7 @@ def member_detail(request, user_id):
     audit_page = Paginator(audit_entries, 25).get_page(request.GET.get("audit_page"))
 
     main = getattr(member_user.profile, "main_character", None)
-    alts = _build_alts(member_user, main) if main else []
+    alts = build_alts(member_user, main) if main else []
 
     current_label_ids = {a.label_id for a in member_user.hr_label_assignments.all()}
     label_categories, uncategorised_labels = _label_category_qs()
@@ -361,7 +365,7 @@ def member_dashboard(request):
     )
     current_rank = current_assignment.rank if current_assignment else None
 
-    current_status_assignment = _get_member_status(user)
+    current_status_assignment = get_member_status(user)
 
     current_label_ids = set(
         user.hr_label_assignments.values_list("label_id", flat=True)

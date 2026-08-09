@@ -34,12 +34,12 @@ def _group_remove(user, group):
         user.groups.remove(group)
 
 
-def _current_assignment_from_prefetch(assignments):
+def current_assignment_from_prefetch(assignments):
     """Return the current RankAssignment from a prefetched iterable, or None."""
     return next((a for a in assignments if a.is_current), None)
 
 
-def _get_member_status(user):
+def get_member_status(user):
     """Return the user's MemberStatusAssignment, or None."""
     try:
         return user.hr_member_status
@@ -47,7 +47,7 @@ def _get_member_status(user):
         return None
 
 
-def _build_alts(user, main):
+def build_alts(user, main):
     """Return list of non-main EveCharacters from the user's prefetched ownerships."""
     return [
         o.character
@@ -221,7 +221,7 @@ def remove_role(user, role, performed_by):
 # Member status
 # ---------------------------------------------------------------------------
 
-def _status_auth_group(config, status):
+def get_status_auth_group(config, status):
     """Return the AA Group for the given status string, or None."""
     if status == MemberStatusAssignment.BREAK:
         return config.break_auth_group
@@ -237,14 +237,14 @@ def set_member_status(user, status, set_by, notes=""):
     - Removes rank and clears roles atomically when status is Break.
     """
     config = HrConfiguration.get_solo()
-    new_group = _status_auth_group(config, status)
+    new_group = get_status_auth_group(config, status)
 
     with transaction.atomic():
         old_assignment = MemberStatusAssignment.objects.filter(user=user).first()
         old_status = old_assignment.status if old_assignment else ""
 
         if old_assignment:
-            old_group = _status_auth_group(config, old_status)
+            old_group = get_status_auth_group(config, old_status)
             _group_remove(user, old_group)
             old_assignment.delete()
 
@@ -289,7 +289,7 @@ def clear_member_status(user, set_by, notes=""):
             return False
 
         old_status = assignment.status
-        _group_remove(user, _status_auth_group(config, old_status))
+        _group_remove(user, get_status_auth_group(config, old_status))
         assignment.delete()
 
         AuditLog.objects.create(
@@ -384,10 +384,10 @@ def compute_member_alerts(user, config, all_titled_roles=None):
     """
     home_corp_id = config.home_corporation_id
 
-    current_assignment = _current_assignment_from_prefetch(user.hr_rank_assignments.all())
+    current_assignment = current_assignment_from_prefetch(user.hr_rank_assignments.all())
     rank = current_assignment.rank if current_assignment else None
 
-    member_status = _get_member_status(user)
+    member_status = get_member_status(user)
     on_status = member_status.status if member_status else ""
     rank_removed_by_status = bool(on_status == MemberStatusAssignment.BREAK and not rank)
 
@@ -528,7 +528,7 @@ def prepare_members(config):
         if not main:
             continue
 
-        alts = _build_alts(user, main)
+        alts = build_alts(user, main)
 
         alerts = compute_member_alerts(user, config, all_titled_roles=all_titled_roles)
         labels = [a.label for a in user.hr_label_assignments.all()]

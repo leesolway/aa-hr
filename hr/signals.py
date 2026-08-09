@@ -57,7 +57,7 @@ def sync_group_removal(sender, instance, action, pk_set, **kwargs):
         return
 
     from .models import AuditLog, HrConfiguration, MemberLabelAssignment, MemberStatusAssignment, RankAssignment, RoleAssignment
-    from .services import remove_rank
+    from .services import get_status_auth_group, remove_rank
 
     # m2m_changed fires for both user.groups.remove() and group.user_set.remove().
     # When called from the group side (e.g. AA admin), instance is the Group and
@@ -100,10 +100,11 @@ def sync_group_removal(sender, instance, action, pk_set, **kwargs):
         # Clear status if its group was revoked externally
         config = HrConfiguration.get_solo()
         status_to_clear = None
-        if config.break_auth_group_id and config.break_auth_group_id in group_pk_set:
-            status_to_clear = MemberStatusAssignment.BREAK
-        elif config.away_auth_group_id and config.away_auth_group_id in group_pk_set:
-            status_to_clear = MemberStatusAssignment.AWAY
+        for status_val in (MemberStatusAssignment.AWAY, MemberStatusAssignment.BREAK):
+            grp = get_status_auth_group(config, status_val)
+            if grp and grp.pk in group_pk_set:
+                status_to_clear = status_val
+                break
         if status_to_clear:
             status_assignment = MemberStatusAssignment.objects.filter(
                 user=user, status=status_to_clear
