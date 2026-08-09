@@ -409,7 +409,6 @@ def member_dashboard(request):
     role_assignments = (
         RoleAssignment.objects.filter(user=user)
         .select_related("role")
-        .prefetch_related("role__can_assign", "role__can_remove")
     )
 
     audit_page = Paginator(

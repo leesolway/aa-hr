@@ -184,17 +184,7 @@
                     <ul class="list-group list-group-flush">
                         {% for ra in member_role_assignments %}
                         <li class="list-group-item d-flex align-items-center justify-content-between gap-2">
-                            <div>
-                                <strong>{{ ra.role.name }}</strong>
-                                <div class="mt-1">
-                                    {% for rank in ra.role.can_assign.all %}
-                                    <span class="badge bg-success">{{ rank.name }}</span>
-                                    {% endfor %}
-                                    {% for rank in ra.role.can_remove.all %}
-                                    <span class="badge bg-danger">{{ rank.name }}</span>
-                                    {% endfor %}
-                                </div>
-                            </div>
+                            <strong>{{ ra.role.name }}</strong>
                             <form method="post" action="{% url 'hr:set_role' member_user.pk %}" class="flex-shrink-0">
                                 {% csrf_token %}
                                 <input type="hidden" name="action" value="remove">
