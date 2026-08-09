@@ -407,6 +407,7 @@
                             <th style="width:40px;"></th>
                             <th>{% trans "Character" %}</th>
                             <th>{% trans "Corporation" %}</th>
+                            <th>{% trans "In-Game Titles" %}</th>
                             <th class="text-center">{% trans "Links" %}</th>
                         </tr>
                     </thead>
@@ -422,6 +423,13 @@
                                      class="rounded" width="20" height="20" loading="lazy"
                                      alt="{{ alt.corporation_name }}">
                                 {{ alt.corporation_name }}
+                            </td>
+                            <td>
+                                {% for title in alt.characteraudit.characterroles.titles.all %}
+                                <span class="badge bg-secondary">{{ title.title }}</span>
+                                {% empty %}
+                                <span class="text-muted small">—</span>
+                                {% endfor %}
                             </td>
                             <td class="text-center">
                                 {% zkillboard_url alt.character_id as zkill %}
