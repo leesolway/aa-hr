@@ -21,6 +21,7 @@ from .services import (
     clear_member_status,
     compute_member_alerts,
     current_assignment_from_prefetch,
+    fix_groups,
     get_current_rank,
     get_effective_assignable_ranks,
     get_effective_removable_rank_ids,
@@ -631,6 +632,30 @@ def audit(request):
 # ---------------------------------------------------------------------------
 
 @login_required
+@login_required
+@permission_required("hr.access_hr")
+@require_POST
+def fix_member(request, user_id):
+    member_user = get_object_or_404(User, pk=user_id)
+    added, removed = fix_groups(member_user, performed_by=request.user)
+    char_count = member_user.character_ownerships.count()
+
+    parts = []
+    if added:
+        parts.append(f"{len(added)} group(s) added")
+    if removed:
+        parts.append(f"{len(removed)} group(s) removed")
+    if char_count:
+        parts.append(f"{char_count} character(s) queued for refresh")
+
+    if parts:
+        messages.success(request, f"{member_user}: " + ", ".join(parts) + ".")
+    else:
+        messages.info(request, f"{member_user}: groups already in sync. {char_count} character(s) queued for refresh.")
+
+    return redirect("hr:member_detail", user_id=user_id)
+
+
 @permission_required("hr.access_hr")
 @require_POST
 def snooze_warning(request, user_id):

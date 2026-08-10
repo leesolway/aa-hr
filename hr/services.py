@@ -586,6 +586,97 @@ def prepare_members(config):
     return members
 
 
+def fix_groups(user, performed_by):
+    """Reconcile HR group memberships and queue corptools character refresh.
+
+    Adds groups missing from user.groups that current HR assignments require,
+    and removes HR-managed groups the user holds but no longer qualifies for.
+    Also queues a corptools + AA EVE character update for every owned character.
+
+    Returns (added, removed) — lists of (kind, name) tuples.
+    """
+    from django.contrib.auth.models import Group as AuthGroup
+    from allianceauth.eveonline.tasks import update_character as aa_update_character
+    from corptools.tasks.character import update_character as ct_update_character
+
+    config = HrConfiguration.get_solo()
+    user_group_ids = set(user.groups.values_list("pk", flat=True))
+
+    # Groups required by current active HR assignments
+    expected = {}  # group_id -> (kind, display_name)
+
+    rank_assignment = (
+        RankAssignment.objects.filter(user=user, is_current=True)
+        .select_related("rank__auth_group")
+        .first()
+    )
+    if rank_assignment and rank_assignment.rank.auth_group_id:
+        expected[rank_assignment.rank.auth_group_id] = ("rank", rank_assignment.rank.name)
+
+    for ra in RoleAssignment.objects.filter(user=user).select_related("role__auth_group"):
+        if ra.role.auth_group_id:
+            expected[ra.role.auth_group_id] = ("role", ra.role.name)
+
+    for la in MemberLabelAssignment.objects.filter(user=user).select_related("label__auth_group"):
+        if la.label.auth_group_id:
+            expected[la.label.auth_group_id] = ("label", la.label.name)
+
+    status_assignment = MemberStatusAssignment.objects.filter(user=user).first()
+    if status_assignment:
+        status_group = get_status_auth_group(config, status_assignment.status)
+        if status_group:
+            expected[status_group.pk] = ("status", status_assignment.get_status_display())
+
+    # All group IDs HR manages (so we only touch groups HR owns)
+    managed_ids = set()
+    managed_ids.update(Rank.objects.filter(auth_group__isnull=False).values_list("auth_group_id", flat=True))
+    managed_ids.update(Role.objects.filter(auth_group__isnull=False).values_list("auth_group_id", flat=True))
+    managed_ids.update(MemberLabel.objects.filter(auth_group__isnull=False).values_list("auth_group_id", flat=True))
+    if config.away_auth_group_id:
+        managed_ids.add(config.away_auth_group_id)
+    if config.break_auth_group_id:
+        managed_ids.add(config.break_auth_group_id)
+
+    added = []
+    removed = []
+
+    missing_ids = set(expected) - user_group_ids
+    if missing_ids:
+        groups = list(AuthGroup.objects.filter(pk__in=missing_ids))
+        user.groups.add(*groups)
+        added = [expected[g.pk] for g in groups]
+
+    stale_ids = (user_group_ids & managed_ids) - set(expected)
+    if stale_ids:
+        groups = list(AuthGroup.objects.filter(pk__in=stale_ids))
+        stale_names = {g.pk: g.name for g in groups}
+        user.groups.remove(*groups)
+        removed = [("group", stale_names[gid]) for gid in stale_ids]
+
+    if added or removed:
+        parts = []
+        if added:
+            parts.append("added: " + ", ".join(f"{k} '{n}'" for k, n in added))
+        if removed:
+            parts.append("removed: " + ", ".join(f"'{n}'" for _, n in removed))
+        AuditLog.objects.create(
+            action=AuditLog.ACTION_GROUP_SYNC,
+            user=user,
+            performed_by=performed_by,
+            notes="Group sync: " + "; ".join(parts),
+        )
+        logger.info("Group sync for %s: added=%d removed=%d", user, len(added), len(removed))
+
+    char_ids = list(
+        user.character_ownerships.values_list("character__character_id", flat=True)
+    )
+    for char_id in char_ids:
+        ct_update_character.apply_async(args=[char_id], kwargs={"force_refresh": True}, priority=4)
+        aa_update_character.apply_async(args=[char_id], priority=4)
+
+    return added, removed
+
+
 def get_main_left_corp_members(config):
     """Return list of member dicts for users who have an alt in the home corp
     but whose main character is not.

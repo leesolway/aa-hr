@@ -14,25 +14,36 @@
     {# Header banner — same style as member dashboard #}
     <div class="card mb-3">
         {% if main %}
-        <div class="d-flex justify-content-start align-items-center flex-nowrap">
-            <img src="{% eve_image 'character' main.character_id 64 %}"
-                 class="m-0 flex-shrink-0"
-                 style="border-radius: 0.375rem 0 0 0.375rem;"
-                 width="64" height="64"
-                 alt="{{ main.character_name }}">
-            <h4 class="m-1 mx-3 text-truncate mb-0">{{ main.character_name }}</h4>
-            <img src="{% eve_image 'corporation' main.corporation_id 32 %}"
-                 class="flex-shrink-0" style="border-radius: 25%;"
-                 width="32" height="32" loading="lazy"
-                 alt="{{ main.corporation_name }}">
-            <h5 class="m-1 mx-3 text-truncate mb-0">{{ main.corporation_name }}</h5>
-            {% if main.alliance_id %}
-            <img src="{% eve_image 'alliance' main.alliance_id 32 %}"
-                 class="flex-shrink-0" style="border-radius: 25%;"
-                 width="32" height="32" loading="lazy"
-                 alt="{{ main.alliance_name }}">
-            <h5 class="m-1 mx-3 text-truncate mb-0">{{ main.alliance_name }}</h5>
-            {% endif %}
+        <div class="d-flex justify-content-between align-items-center flex-wrap">
+            <div class="d-flex align-items-center flex-nowrap">
+                <img src="{% eve_image 'character' main.character_id 64 %}"
+                     class="m-0 flex-shrink-0"
+                     style="border-radius: 0.375rem 0 0 0.375rem;"
+                     width="64" height="64"
+                     alt="{{ main.character_name }}">
+                <h4 class="m-1 mx-3 text-truncate mb-0">{{ main.character_name }}</h4>
+                <img src="{% eve_image 'corporation' main.corporation_id 32 %}"
+                     class="flex-shrink-0" style="border-radius: 25%;"
+                     width="32" height="32" loading="lazy"
+                     alt="{{ main.corporation_name }}">
+                <h5 class="m-1 mx-3 text-truncate mb-0">{{ main.corporation_name }}</h5>
+                {% if main.alliance_id %}
+                <img src="{% eve_image 'alliance' main.alliance_id 32 %}"
+                     class="flex-shrink-0" style="border-radius: 25%;"
+                     width="32" height="32" loading="lazy"
+                     alt="{{ main.alliance_name }}">
+                <h5 class="m-1 mx-3 text-truncate mb-0">{{ main.alliance_name }}</h5>
+                {% endif %}
+            </div>
+            <div class="pe-3 py-2">
+                <form method="post" action="{% url 'hr:fix_member' member_user.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-warning"
+                            title="{% trans 'Sync HR groups and queue character refresh in corptools' %}">
+                        <i class="fa-solid fa-wrench"></i> {% trans "Fix" %}
+                    </button>
+                </form>
+            </div>
         </div>
         {% else %}
         <div class="card-body">
