@@ -66,6 +66,16 @@
             </a>
         </div>
         <div class="col-sm-6 col-xl-3">
+            <a href="{% url 'hr:member_list' %}?group_issue=1" class="text-decoration-none">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <div class="text-muted small text-uppercase">{% trans "Group Sync Issues" %}</div>
+                        <div class="fs-2 fw-bold{% if group_issues > 0 %} text-danger{% endif %}">{{ group_issues }}</div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-sm-6 col-xl-3">
             <a href="{% url 'hr:unregistered' %}" class="text-decoration-none">
                 <div class="card h-100">
                     <div class="card-body text-center">
@@ -163,6 +173,11 @@
                                 {% if member.has_stale_role_title %}
                                 <span class="badge bg-warning text-dark">
                                     <i class="fa-solid fa-triangle-exclamation"></i> {% trans "Unattained role title" %}
+                                </span>
+                                {% endif %}
+                                {% if member.has_group_issue %}
+                                <span class="badge bg-danger">
+                                    <i class="fa-solid fa-users-slash"></i> {% trans "Group sync issue" %}
                                 </span>
                                 {% endif %}
                                 {% if member.snooze %}

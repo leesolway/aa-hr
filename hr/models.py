@@ -373,6 +373,7 @@ class AuditLog(models.Model):
     ACTION_LABEL_REMOVED = "label_removed"
     ACTION_ROLE_ASSIGNED = "role_assigned"
     ACTION_ROLE_REMOVED = "role_removed"
+    ACTION_GROUP_SYNC = "group_sync"
 
     ACTION_CHOICES = [
         (ACTION_RANK_ASSIGNED, "Rank assigned"),
@@ -384,6 +385,7 @@ class AuditLog(models.Model):
         (ACTION_LABEL_REMOVED, "Label removed"),
         (ACTION_ROLE_ASSIGNED, "Role assigned"),
         (ACTION_ROLE_REMOVED, "Role removed"),
+        (ACTION_GROUP_SYNC, "Group sync"),
     ]
 
     timestamp = models.DateTimeField(auto_now_add=True)

@@ -102,6 +102,7 @@ def dashboard(request):
             or m["has_audit_issue"]
             or m["has_role_title_mismatch"]
             or m["has_stale_role_title"]
+            or m["has_group_issue"]
         )
 
     def _not_snoozed(m):
@@ -110,6 +111,7 @@ def dashboard(request):
     no_rank      = sum(1 for m in members if not m["rank"] and not m["rank_removed_by_status"] and _not_snoozed(m))
     mismatches   = sum(1 for m in members if m["title_mismatch"] and _not_snoozed(m))
     audit_issues = sum(1 for m in members if m["has_audit_issue"] and _not_snoozed(m))
+    group_issues = sum(1 for m in members if m["has_group_issue"] and _not_snoozed(m))
 
     all_issue_members = [m for m in members if _is_issue(m)]
     for m in all_issue_members:
@@ -131,6 +133,7 @@ def dashboard(request):
         "no_rank": no_rank,
         "title_mismatches": mismatches,
         "audit_issues": audit_issues,
+        "group_issues": group_issues,
         "issue_members": issue_members,
         "departed_members": departed_members,
         "departed_count": len(departed_members),
@@ -170,6 +173,10 @@ def member_list(request):
     audit_filter = request.GET.get("audit_issue", "")
     if audit_filter == "1":
         members = [m for m in members if m["has_audit_issue"]]
+
+    group_issue_filter = request.GET.get("group_issue", "")
+    if group_issue_filter == "1":
+        members = [m for m in members if m["has_group_issue"]]
 
     if search:
         members = [
@@ -213,6 +220,7 @@ def member_detail(request, user_id):
             "hr_rank_assignments__assigned_by__profile__main_character",
             "role_assignments__role__corp_title",
             "hr_label_assignments__label__category",
+            "groups",
         ),
         pk=user_id,
     )
@@ -272,6 +280,7 @@ def member_detail(request, user_id):
         "audit_issue_chars": alerts["audit_issue_chars"],
         "role_title_mismatches": alerts["role_title_mismatches"],
         "stale_role_title_chars": alerts["stale_role_title_chars"],
+        "group_issues": alerts["group_issues"],
         "current_status_assignment": alerts["member_status"],
         "assignable_ranks": assignable_ranks,
         "can_assign": can_assign,

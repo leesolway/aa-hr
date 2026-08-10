@@ -101,6 +101,8 @@ Compare `.title` string against `rank.corp_title.title` or `role.corp_title.titl
 | `role_title_mismatches` | list[(Role, list[EveCharacter])] | Per-role missing characters |
 | `has_stale_role_title` | bool | Character has a title for a Role the user doesn't hold |
 | `stale_role_title_chars` | list[(Role, list[EveCharacter])] | Per-role characters with unattained title |
+| `has_group_issue` | bool | One or more HR assignments are missing their corresponding AA group |
+| `group_issues` | list[(str, str)] | `(kind, name)` tuples — kind is `"rank"`, `"role"`, `"label"`, or `"status"` |
 
 ### Permissions
 

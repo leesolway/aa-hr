@@ -484,6 +484,31 @@ def compute_member_alerts(user, config, all_titled_roles=None):
     role_title_mismatches = [(role, chars) for role, chars in role_missing.items() if chars]
     stale_role_title_chars = [(role, chars) for role, chars in stale_role_map.items() if chars]
 
+    # Group sync check — detect HR assignments whose auth_group is missing from user.groups
+    user_group_ids = {g.pk for g in user.groups.all()}
+    group_issues = []
+
+    if rank and rank.auth_group_id and rank.auth_group_id not in user_group_ids:
+        group_issues.append(("rank", rank.name))
+
+    for ra in user.role_assignments.all():
+        if ra.role.auth_group_id and ra.role.auth_group_id not in user_group_ids:
+            group_issues.append(("role", ra.role.name))
+
+    for la in user.hr_label_assignments.all():
+        if la.label.auth_group_id and la.label.auth_group_id not in user_group_ids:
+            group_issues.append(("label", la.label.name))
+
+    if member_status:
+        if member_status.status == MemberStatusAssignment.BREAK:
+            status_group_id = config.break_auth_group_id
+        elif member_status.status == MemberStatusAssignment.AWAY:
+            status_group_id = config.away_auth_group_id
+        else:
+            status_group_id = None
+        if status_group_id and status_group_id not in user_group_ids:
+            group_issues.append(("status", member_status.get_status_display()))
+
     return {
         "rank": rank,
         "title_mismatch": bool(missing_title_chars) and on_status not in {MemberStatusAssignment.AWAY, MemberStatusAssignment.BREAK},
@@ -497,6 +522,8 @@ def compute_member_alerts(user, config, all_titled_roles=None):
         "has_role_title_mismatch": bool(role_title_mismatches),
         "stale_role_title_chars": stale_role_title_chars,
         "has_stale_role_title": bool(stale_role_title_chars),
+        "group_issues": group_issues,
+        "has_group_issue": bool(group_issues),
     }
 
 
@@ -520,6 +547,7 @@ def prepare_members(config):
             "hr_rank_assignments__rank__corp_title",
             "role_assignments__role__corp_title",
             "hr_label_assignments__label",
+            "groups",
         )
     )
 

@@ -343,6 +343,35 @@
         </div>
         {% endfor %}
 
+        {% if group_issues %}
+        <div class="col-lg-4 mb-3">
+            <div class="card border-danger">
+                <div class="card-header text-bg-danger">
+                    <h5 class="mb-0"><i class="fa-solid fa-users-slash"></i> {% trans "Group Sync Issues" %}</h5>
+                </div>
+                <div class="card-body">
+                    <p class="mb-2 small text-muted">{% trans "The following HR assignments are missing their corresponding AA group. This may indicate an external group removal. Re-assign or remove the affected item to correct it." %}</p>
+                    <ul class="list-unstyled mb-0">
+                        {% for kind, name in group_issues %}
+                        <li class="mb-1">
+                            {% if kind == "rank" %}
+                            <span class="badge bg-info me-1">{% trans "Rank" %}</span>
+                            {% elif kind == "role" %}
+                            <span class="badge bg-primary me-1">{% trans "Role" %}</span>
+                            {% elif kind == "label" %}
+                            <span class="badge bg-secondary me-1">{% trans "Label" %}</span>
+                            {% elif kind == "status" %}
+                            <span class="badge bg-warning text-dark me-1">{% trans "Status" %}</span>
+                            {% endif %}
+                            {{ name }}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         {% if audit_issue_chars %}
         <div class="col-lg-4 mb-3">
             <div class="card border-danger">
