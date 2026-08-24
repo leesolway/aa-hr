@@ -138,44 +138,42 @@
                                 {{ member.main.corporation_name }}
                             </td>
                             <td>
-                                {% if member.rank %}
-                                <span class="badge bg-info">{{ member.rank.name }}</span>
+                                {% if member.alerts.rank %}
+                                <span class="badge bg-info">{{ member.alerts.rank.name }}</span>
                                 {% else %}
                                 <span class="text-muted">{% trans "No rank" %}</span>
                                 {% endif %}
+                                {% if member.alerts.member_status %}
+                                <span class="badge bg-warning text-dark ms-1">{{ member.alerts.member_status.get_status_display }}</span>
+                                {% endif %}
                             </td>
                             <td>
-                                {% if not member.rank %}
+                                {% if member.alerts.has_no_rank_issue %}
                                 <span class="badge bg-warning text-dark">
                                     <i class="fa-solid fa-circle-exclamation"></i> {% trans "No rank assigned" %}
                                 </span>
                                 {% endif %}
-                                {% if member.title_mismatch %}
+                                {% if member.alerts.has_title_mismatch %}
                                 <span class="badge bg-warning text-dark">
                                     <i class="fa-solid fa-triangle-exclamation"></i> {% trans "Title mismatch" %}
                                 </span>
                                 {% endif %}
-                                {% if member.stale_title_chars %}
-                                <span class="badge bg-warning text-dark">
-                                    <i class="fa-solid fa-triangle-exclamation"></i> {% trans "Title not removed" %}
-                                </span>
-                                {% endif %}
-                                {% if member.has_audit_issue %}
+                                {% if member.alerts.has_audit_issue %}
                                 <span class="badge bg-danger">
                                     <i class="fa-solid fa-database"></i> {% trans "Audit issue" %}
                                 </span>
                                 {% endif %}
-                                {% if member.has_role_title_mismatch %}
+                                {% if member.alerts.has_role_title_mismatch %}
                                 <span class="badge bg-warning text-dark">
                                     <i class="fa-solid fa-triangle-exclamation"></i> {% trans "Role title missing" %}
                                 </span>
                                 {% endif %}
-                                {% if member.has_stale_role_title %}
+                                {% if member.alerts.has_unentitled_rank_title or member.alerts.has_unentitled_role_title %}
                                 <span class="badge bg-warning text-dark">
-                                    <i class="fa-solid fa-triangle-exclamation"></i> {% trans "Unattained role title" %}
+                                    <i class="fa-solid fa-triangle-exclamation"></i> {% trans "Unentitled title" %}
                                 </span>
                                 {% endif %}
-                                {% if member.has_group_issue %}
+                                {% if member.alerts.has_group_issue %}
                                 <span class="badge bg-danger">
                                     <i class="fa-solid fa-users-slash"></i> {% trans "Group sync issue" %}
                                 </span>

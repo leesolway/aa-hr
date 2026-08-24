@@ -20,7 +20,6 @@ from .services import (
     build_alts,
     clear_member_status,
     compute_member_alerts,
-    current_assignment_from_prefetch,
     fix_groups,
     get_current_rank,
     get_effective_assignable_ranks,
@@ -95,26 +94,15 @@ def dashboard(request):
     snooze_map = {s.user_id: s for s in active_snoozes}
     snoozed_ids = set(snooze_map)
 
-    def _is_issue(m):
-        return (
-            m["title_mismatch"]
-            or m["stale_title_chars"]
-            or (not m["rank"] and not m["rank_removed_by_status"])
-            or m["has_audit_issue"]
-            or m["has_role_title_mismatch"]
-            or m["has_stale_role_title"]
-            or m["has_group_issue"]
-        )
-
     def _not_snoozed(m):
         return show_snoozed or m["user"].pk not in snoozed_ids
 
-    no_rank      = sum(1 for m in members if not m["rank"] and not m["rank_removed_by_status"] and _not_snoozed(m))
-    mismatches   = sum(1 for m in members if m["title_mismatch"] and _not_snoozed(m))
-    audit_issues = sum(1 for m in members if m["has_audit_issue"] and _not_snoozed(m))
-    group_issues = sum(1 for m in members if m["has_group_issue"] and _not_snoozed(m))
+    no_rank      = sum(1 for m in members if m["alerts"].has_no_rank_issue and _not_snoozed(m))
+    mismatches   = sum(1 for m in members if m["alerts"].has_title_mismatch and _not_snoozed(m))
+    audit_issues = sum(1 for m in members if m["alerts"].has_audit_issue and _not_snoozed(m))
+    group_issues = sum(1 for m in members if m["alerts"].has_group_issue and _not_snoozed(m))
 
-    all_issue_members = [m for m in members if _is_issue(m)]
+    all_issue_members = [m for m in members if m["alerts"].has_any_issue]
     for m in all_issue_members:
         if m["user"].pk in snoozed_ids:
             m["snooze"] = snooze_map[m["user"].pk]
@@ -164,20 +152,20 @@ def member_list(request):
     search = request.GET.get("search", "").strip().lower()
 
     if rank_filter == "none":
-        members = [m for m in members if not m["rank"]]
+        members = [m for m in members if not m["alerts"].rank]
     elif rank_filter.isdigit():
-        members = [m for m in members if m["rank"] and m["rank"].pk == int(rank_filter)]
+        members = [m for m in members if m["alerts"].rank and m["alerts"].rank.pk == int(rank_filter)]
 
     if mismatch_filter == "1":
-        members = [m for m in members if m["title_mismatch"]]
+        members = [m for m in members if m["alerts"].has_title_mismatch]
 
     audit_filter = request.GET.get("audit_issue", "")
     if audit_filter == "1":
-        members = [m for m in members if m["has_audit_issue"]]
+        members = [m for m in members if m["alerts"].has_audit_issue]
 
     group_issue_filter = request.GET.get("group_issue", "")
     if group_issue_filter == "1":
-        members = [m for m in members if m["has_group_issue"]]
+        members = [m for m in members if m["alerts"].has_group_issue]
 
     if search:
         members = [
@@ -214,11 +202,11 @@ def member_detail(request, user_id):
         User.objects.select_related(
             "profile__main_character",
             "hr_member_status",
+            "hr_rank_assignment__rank__auth_group",
+            "hr_rank_assignment__rank__corp_title",
+            "hr_rank_assignment__assigned_by__profile__main_character",
         ).prefetch_related(
             "character_ownerships__character__characteraudit__characterroles__titles",
-            "hr_rank_assignments__rank__auth_group",
-            "hr_rank_assignments__rank__corp_title",
-            "hr_rank_assignments__assigned_by__profile__main_character",
             "role_assignments__role__corp_title",
             "hr_label_assignments__label__category",
             "groups",
@@ -226,8 +214,8 @@ def member_detail(request, user_id):
         pk=user_id,
     )
 
-    current_assignment = current_assignment_from_prefetch(member_user.hr_rank_assignments.all())
-    current_rank = current_assignment.rank if current_assignment else None
+    alerts = compute_member_alerts(member_user, config)
+    current_rank = alerts.rank  # used for permission check below
 
     assignable_ranks = get_effective_assignable_ranks(request.user)
     removable_rank_ids = get_effective_removable_rank_ids(request.user)
@@ -241,8 +229,6 @@ def member_detail(request, user_id):
 
     if request.user.is_superuser:
         assignable_ranks = Rank.objects.filter(is_active=True)
-
-    alerts = compute_member_alerts(member_user, config)
 
     audit_entries = AuditLog.objects.filter(user=member_user).select_related(
         "performed_by__profile__main_character",
@@ -274,15 +260,7 @@ def member_detail(request, user_id):
         "member_user": member_user,
         "main": main,
         "alts": alts,
-        "current_rank": current_rank,
-        "current_assignment": current_assignment,
-        "missing_title_chars": alerts["missing_title_chars"],
-        "stale_title_chars": alerts["stale_title_chars"],
-        "audit_issue_chars": alerts["audit_issue_chars"],
-        "role_title_mismatches": alerts["role_title_mismatches"],
-        "stale_role_title_chars": alerts["stale_role_title_chars"],
-        "group_issues": alerts["group_issues"],
-        "current_status_assignment": alerts["member_status"],
+        "alerts": alerts,
         "assignable_ranks": assignable_ranks,
         "can_assign": can_assign,
         "can_remove": can_remove,
@@ -372,12 +350,8 @@ def member_dashboard(request):
     """Self-service dashboard: members view their own rank/status and toggle their own labels."""
     user = request.user
 
-    current_assignment = (
-        user.hr_rank_assignments.filter(is_current=True)
-        .select_related("rank")
-        .first()
-    )
-    current_rank = current_assignment.rank if current_assignment else None
+    assignment = get_current_rank(user)
+    current_rank = assignment.rank if assignment else None
 
     current_status_assignment = get_member_status(user)
 

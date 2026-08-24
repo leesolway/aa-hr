@@ -7,10 +7,10 @@
                 <tr>
                     <th style="width:100px;" class="ps-3 align-middle">{% trans "Rank" %}</th>
                     <td class="align-middle">
-                        {% if current_rank %}
-                        <span class="badge bg-info fs-6">{{ current_rank.name }}</span>
-                        {% if current_rank.description %}
-                        <div class="text-muted small mt-1">{{ current_rank.description }}</div>
+                        {% if alerts.rank %}
+                        <span class="badge bg-info fs-6">{{ alerts.rank.name }}</span>
+                        {% if alerts.rank.description %}
+                        <div class="text-muted small mt-1">{{ alerts.rank.description }}</div>
                         {% endif %}
                         {% else %}
                         <span class="text-muted">{% trans "No rank assigned" %}</span>
@@ -20,16 +20,16 @@
                 <tr>
                     <th class="ps-3 align-middle">{% trans "Status" %}</th>
                     <td class="align-middle">
-                        {% if current_status_assignment %}
+                        {% if alerts.member_status %}
                         <span class="badge bg-warning text-dark fs-6">
-                            <i class="fa-solid fa-clock"></i> {{ current_status_assignment.get_status_display }}
+                            <i class="fa-solid fa-clock"></i> {{ alerts.member_status.get_status_display }}
                         </span>
-                        {% if current_status_assignment.notes %}
-                        <span class="text-muted small ms-2">{{ current_status_assignment.notes }}</span>
+                        {% if alerts.member_status.notes %}
+                        <span class="text-muted small ms-2">{{ alerts.member_status.notes }}</span>
                         {% endif %}
                         <div class="text-muted small mt-1">
-                            {% trans "Set" %} {{ current_status_assignment.set_at|date:"Y-m-d" }}
-                            {% if current_status_assignment.set_by %}{% trans "by" %} {{ current_status_assignment.set_by }}{% endif %}
+                            {% trans "Set" %} {{ alerts.member_status.set_at|date:"Y-m-d" }}
+                            {% if alerts.member_status.set_by %}{% trans "by" %} {{ alerts.member_status.set_by }}{% endif %}
                         </div>
                         {% else %}
                         <span class="text-muted">{% trans "Active" %}</span>

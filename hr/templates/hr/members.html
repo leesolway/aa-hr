@@ -78,22 +78,22 @@
                                 {{ member.main.corporation_name }}
                             </td>
                             <td>
-                                {% if member.rank %}
-                                <span class="badge bg-info">{{ member.rank.name }}</span>
-                                {% if member.title_mismatch %}
+                                {% if member.alerts.rank %}
+                                <span class="badge bg-info">{{ member.alerts.rank.name }}</span>
+                                {% if member.alerts.has_title_mismatch %}
                                 <i class="fa-solid fa-triangle-exclamation text-warning ms-1"
                                    title="{% trans 'EVE titles out of sync' %}"></i>
                                 {% endif %}
-                                {% if member.stale_title_chars %}
+                                {% if member.alerts.has_unentitled_rank_title or member.alerts.has_unentitled_role_title %}
                                 <i class="fa-solid fa-triangle-exclamation text-warning ms-1"
-                                   title="{% trans 'In-game title not yet removed' %}"></i>
+                                   title="{% trans 'Character has an unentitled in-game title' %}"></i>
                                 {% endif %}
                                 {% else %}
                                 <span class="text-muted">—</span>
                                 {% endif %}
-                                {% if member.member_status %}
+                                {% if member.alerts.member_status %}
                                 <span class="badge bg-warning text-dark ms-1">
-                                    <i class="fa-solid fa-clock"></i> {{ member.member_status.get_status_display }}
+                                    <i class="fa-solid fa-clock"></i> {{ member.alerts.member_status.get_status_display }}
                                 </span>
                                 {% endif %}
                             </td>

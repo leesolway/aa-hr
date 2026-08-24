@@ -49,7 +49,7 @@ class HrConfigurationAdmin(admin.ModelAdmin):
         no_match = 0
 
         for user in users:
-            if any(a.is_current for a in user.hr_rank_assignments.all()):
+            if RankAssignment.objects.filter(user=user).exists():
                 skipped += 1
                 continue
 
@@ -233,8 +233,8 @@ class RankAdmin(CorpTitleFieldMixin, admin.ModelAdmin):
 
 @admin.register(RankAssignment)
 class RankAssignmentAdmin(admin.ModelAdmin):
-    list_display = ["user", "rank", "is_current", "assigned_by", "assigned_at"]
-    list_filter = ["rank", "is_current"]
+    list_display = ["user", "rank", "assigned_by", "assigned_at"]
+    list_filter = ["rank"]
     search_fields = ["user__profile__main_character__character_name"]
     readonly_fields = ["assigned_at"]
 

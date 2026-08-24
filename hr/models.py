@@ -91,10 +91,10 @@ class Rank(models.Model):
 
 
 class RankAssignment(models.Model):
-    user = models.ForeignKey(
+    user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name="hr_rank_assignments",
+        related_name="hr_rank_assignment",
     )
     rank = models.ForeignKey(Rank, on_delete=models.PROTECT, related_name="assignments")
     assigned_by = models.ForeignKey(
@@ -106,18 +106,10 @@ class RankAssignment(models.Model):
     )
     assigned_at = models.DateTimeField(auto_now_add=True)
     notes = models.TextField(blank=True, default="")
-    is_current = models.BooleanField(default=True)
 
     class Meta:
-        ordering = ["-assigned_at"]
         verbose_name = "Rank — Assignment"
         verbose_name_plural = "Rank — Assignments"
-        indexes = [
-            models.Index(
-                fields=["user", "is_current"],
-                name="hr_rankassignment_user_cur_idx",
-            ),
-        ]
 
     def __str__(self):
         return f"{self.user} — {self.rank}"
@@ -154,8 +146,8 @@ class Role(models.Model):
 
     class Meta:
         ordering = ["name"]
-        verbose_name = "Rank — Role"
-        verbose_name_plural = "Rank — Roles"
+        verbose_name = "Role — Definition"
+        verbose_name_plural = "Role — Definitions"
 
     def __str__(self):
         return self.name
@@ -179,8 +171,8 @@ class RoleAssignment(models.Model):
 
     class Meta:
         unique_together = [("user", "role")]
-        verbose_name = "Rank — Role Assignment"
-        verbose_name_plural = "Rank — Role Assignments"
+        verbose_name = "Role — Assignment"
+        verbose_name_plural = "Role — Assignments"
 
     def __str__(self):
         return f"{self.user} — {self.role}"
@@ -288,8 +280,8 @@ class MemberLabel(models.Model):
 
     class Meta:
         ordering = ["category__display_order", "category__name", "name"]
-        verbose_name = "Label — Label"
-        verbose_name_plural = "Label — Labels"
+        verbose_name = "Label — Definition"
+        verbose_name_plural = "Label — Definitions"
 
     def __str__(self):
         return self.name

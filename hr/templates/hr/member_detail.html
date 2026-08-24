@@ -100,7 +100,7 @@
 
         {# Member Overview #}
         <div class="col-lg-4">
-            {% include 'hr/partials/member_overview_card.html' with overview_roles=member_role_assignments %}
+            {% include 'hr/partials/member_overview_card.html' with overview_roles=member_role_assignments alerts=alerts %}
         </div>
 
         {# TeamSpeak #}
@@ -125,10 +125,10 @@
                             <label class="form-label fw-semibold" for="rank-select">{% trans "Rank" %}</label>
                             <select id="rank-select" name="rank_id" class="form-select">
                                 {% if can_remove %}
-                                <option value="0"{% if not current_rank %} selected{% endif %}>{% trans "— No rank —" %}</option>
+                                <option value="0"{% if not alerts.rank %} selected{% endif %}>{% trans "— No rank —" %}</option>
                                 {% endif %}
                                 {% for rank in assignable_ranks %}
-                                <option value="{{ rank.pk }}"{% if current_rank and current_rank.pk == rank.pk %} selected{% endif %}>
+                                <option value="{{ rank.pk }}"{% if alerts.rank and alerts.rank.pk == rank.pk %} selected{% endif %}>
                                     {{ rank.name }}{% if rank.description %} — {{ rank.description|truncatechars:40 }}{% endif %}
                                 </option>
                                 {% endfor %}
@@ -149,8 +149,8 @@
         <!-- Member Status -->
         {% if can_assign or can_remove %}
         <div class="col-lg-4 mb-3 mb-lg-0">
-            <div class="card h-100{% if current_status_assignment %} border-warning{% endif %}">
-                <div class="card-header{% if current_status_assignment %} text-bg-warning{% endif %}">
+            <div class="card h-100{% if alerts.member_status %} border-warning{% endif %}">
+                <div class="card-header{% if alerts.member_status %} text-bg-warning{% endif %}">
                     <h5 class="mb-0"><i class="fa-solid fa-clock"></i> {% trans "Member Status" %}</h5>
                 </div>
                 <div class="card-body">
@@ -162,8 +162,8 @@
                                 {% get_status_choices as status_choices %}
                                 {% for value, label in status_choices %}
                                 <option value="{{ value }}"
-                                    {% if current_status_assignment and current_status_assignment.status == value %}selected
-                                    {% elif not current_status_assignment and value == "active" %}selected{% endif %}>
+                                    {% if alerts.member_status and alerts.member_status.status == value %}selected
+                                    {% elif not alerts.member_status and value == "active" %}selected{% endif %}>
                                     {{ label }}{% if value == "break" %} ({% trans "removes rank" %}){% endif %}
                                 </option>
                                 {% endfor %}
@@ -235,12 +235,12 @@
 
     <!-- Row 3: Title sync + Audit issues + TeamSpeak -->
     <div class="row">
-        {% if current_rank %}
+        {% if alerts.rank %}
         <div class="col-lg-4 mb-3">
             <div class="card">
                 <div class="card-header">
                     <h5 class="mb-0">
-                        {% if missing_title_chars %}
+                        {% if alerts.missing_title_chars %}
                         <i class="fa-solid fa-triangle-exclamation text-warning"></i>
                         {% else %}
                         <i class="fa-solid fa-circle-check text-success"></i>
@@ -251,14 +251,14 @@
                 <div class="card-body">
                     <p class="mb-1">
                         <strong>{% trans "Expected title:" %}</strong>
-                        <code>{{ current_rank.corp_title.title|default:"—" }}</code>
+                        <code>{{ alerts.rank.corp_title.title|default:"—" }}</code>
                     </p>
-                    {% if not current_rank.corp_title %}
+                    {% if not alerts.rank.corp_title %}
                     <p class="text-muted small">{% trans "No EVE title configured for this rank." %}</p>
-                    {% elif missing_title_chars %}
+                    {% elif alerts.missing_title_chars %}
                     <p class="text-warning mb-1">{% trans "Characters missing this title:" %}</p>
                     <ul class="list-unstyled mb-0">
-                        {% for char in missing_title_chars %}
+                        {% for char in alerts.missing_title_chars %}
                         <li>
                             <img src="{% eve_image 'character' char.character_id 32 %}"
                                  class="rounded me-1" width="20" height="20" loading="lazy"
@@ -275,18 +275,22 @@
         </div>
         {% endif %}
 
-        {% if stale_title_chars %}
+        {% for rank_obj, chars in alerts.unentitled_rank_title_chars %}
         <div class="col-lg-4 mb-3">
             <div class="card border-warning">
                 <div class="card-header bg-warning text-dark">
                     <h5 class="mb-0">
-                        <i class="fa-solid fa-triangle-exclamation"></i> {% trans "In-Game Title Not Removed" %}
+                        <i class="fa-solid fa-triangle-exclamation"></i> {% trans "Unentitled Rank Title" %}
                     </h5>
                 </div>
                 <div class="card-body">
-                    <p class="mb-2 text-warning">{% trans "Member is on break but still has their EVE title. Remove it in-game:" %}</p>
+                    <p class="mb-1">
+                        <strong>{% trans "Title:" %}</strong> <code>{{ rank_obj.corp_title.title }}</code><br>
+                        <strong>{% trans "Granted by rank:" %}</strong> {{ rank_obj.name }}
+                    </p>
+                    <p class="mb-2 text-muted small">{% trans "Character holds this title in-game but member does not hold the corresponding rank." %}</p>
                     <ul class="list-unstyled mb-0">
-                        {% for char in stale_title_chars %}
+                        {% for char in chars %}
                         <li>
                             <img src="{% eve_image 'character' char.character_id 32 %}"
                                  class="rounded me-1" width="20" height="20" loading="lazy"
@@ -298,9 +302,9 @@
                 </div>
             </div>
         </div>
-        {% endif %}
+        {% endfor %}
 
-        {% for role, chars in role_title_mismatches %}
+        {% for role, chars in alerts.role_title_mismatches %}
         <div class="col-lg-4 mb-3">
             <div class="card border-warning">
                 <div class="card-header bg-warning text-dark">
@@ -328,18 +332,21 @@
         </div>
         {% endfor %}
 
-        {% for role, chars in stale_role_title_chars %}
+        {% for role, chars in alerts.unentitled_role_title_chars %}
         <div class="col-lg-4 mb-3">
             <div class="card border-warning">
                 <div class="card-header bg-warning text-dark">
                     <h5 class="mb-0">
-                        <i class="fa-solid fa-triangle-exclamation"></i> {% trans "Unattained Role Title" %}
+                        <i class="fa-solid fa-triangle-exclamation"></i> {% trans "Unentitled Role Title" %}
                     </h5>
                 </div>
                 <div class="card-body">
-                    <p class="mb-1 text-warning">{% blocktrans with name=role.name %}Character has the title for <strong>{{ name }}</strong> but does not hold this role.{% endblocktrans %}</p>
-                    <p class="mb-1"><strong>{% trans "Title:" %}</strong> <code>{{ role.corp_title.title }}</code></p>
-                    <ul class="list-unstyled mb-0 mt-2">
+                    <p class="mb-1">
+                        <strong>{% trans "Title:" %}</strong> <code>{{ role.corp_title.title }}</code><br>
+                        <strong>{% trans "Granted by role:" %}</strong> {{ role.name }}
+                    </p>
+                    <p class="mb-2 text-muted small">{% trans "Character holds this title in-game but member does not hold the corresponding role." %}</p>
+                    <ul class="list-unstyled mb-0">
                         {% for char in chars %}
                         <li>
                             <img src="{% eve_image 'character' char.character_id 32 %}"
@@ -354,7 +361,7 @@
         </div>
         {% endfor %}
 
-        {% if group_issues %}
+        {% if alerts.group_issues %}
         <div class="col-lg-4 mb-3">
             <div class="card border-danger">
                 <div class="card-header text-bg-danger">
@@ -363,7 +370,7 @@
                 <div class="card-body">
                     <p class="mb-2 small text-muted">{% trans "The following HR assignments are missing their corresponding AA group. This may indicate an external group removal. Re-assign or remove the affected item to correct it." %}</p>
                     <ul class="list-unstyled mb-0">
-                        {% for kind, name in group_issues %}
+                        {% for kind, name in alerts.group_issues %}
                         <li class="mb-1">
                             {% if kind == "rank" %}
                             <span class="badge bg-info me-1">{% trans "Rank" %}</span>
@@ -383,7 +390,7 @@
         </div>
         {% endif %}
 
-        {% if audit_issue_chars %}
+        {% if alerts.audit_issue_chars %}
         <div class="col-lg-4 mb-3">
             <div class="card border-danger">
                 <div class="card-header text-bg-danger">
@@ -399,7 +406,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for char, kind in audit_issue_chars %}
+                            {% for char, kind in alerts.audit_issue_chars %}
                             <tr>
                                 <td><img src="{% eve_image 'character' char.character_id 32 %}"
                                          class="rounded" width="32" height="32" loading="lazy"

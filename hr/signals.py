@@ -21,7 +21,7 @@ def remove_rank_on_state_loss(sender, user, state, **kwargs):
 
     note = f"Automatic removal: state changed to '{state}'"
 
-    if RankAssignment.objects.filter(user=user, is_current=True).exists():
+    if RankAssignment.objects.filter(user=user).exists():
         logger.info("Removing rank from %s due to state change to '%s'", user, state)
         remove_rank(user, performed_by=None, notes=note)
 
@@ -149,12 +149,9 @@ def sync_group_removal(sender, instance, action, pk_set, **kwargs):
             )
 
         # Remove rank if its auth_group was revoked externally.
-        # RankAssignment is marked is_current=False before _group_remove fires inside
-        # remove_rank(), so the query below returns None on any re-entrant signal call.
         rank_assignment = (
             RankAssignment.objects.filter(
                 user=user,
-                is_current=True,
                 rank__auth_group__in=group_pk_set,
             )
             .select_related("rank")
