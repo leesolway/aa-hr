@@ -70,6 +70,17 @@ def _unregistered_chars_qs(state):
     ).filter(character_ownership__isnull=True)
 
 
+def _load_snooze_map():
+    """Return dict of user_id → DashboardSnooze for all currently active snoozes."""
+    now = timezone.now()
+    return {
+        s.user_id: s
+        for s in DashboardSnooze.objects.filter(
+            Q(expires_at__isnull=True) | Q(expires_at__gt=now)
+        ).select_related("snoozed_by")
+    }
+
+
 # ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------
@@ -87,11 +98,7 @@ def dashboard(request):
 
     total = len(members)
 
-    now = timezone.now()
-    active_snoozes = DashboardSnooze.objects.filter(
-        Q(expires_at__isnull=True) | Q(expires_at__gt=now)
-    ).select_related("snoozed_by")
-    snooze_map = {s.user_id: s for s in active_snoozes}
+    snooze_map = _load_snooze_map()
     snoozed_ids = set(snooze_map)
 
     def _not_snoozed(m):
@@ -174,6 +181,12 @@ def member_list(request):
             or any(search in (a.character_name or "").lower() for a in m["alts"])
         ]
 
+    snooze_map = _load_snooze_map()
+    for m in members:
+        snooze = snooze_map.get(m["user"].pk)
+        if snooze:
+            m["snooze"] = snooze
+
     paginator = Paginator(members, 50)
     page_obj = paginator.get_page(request.GET.get("page"))
 
@@ -185,6 +198,7 @@ def member_list(request):
         "rank_filter": rank_filter,
         "mismatch_filter": mismatch_filter,
         "audit_filter": audit_filter,
+        "group_issue_filter": group_issue_filter,
         "search": request.GET.get("search", ""),
     })
 
@@ -220,7 +234,7 @@ def member_detail(request, user_id):
     assignable_ranks = get_effective_assignable_ranks(request.user)
     removable_rank_ids = get_effective_removable_rank_ids(request.user)
 
-    can_assign = assignable_ranks.exists() or request.user.is_superuser
+    can_assign = request.user.is_superuser or assignable_ranks.exists()
     can_remove = (
         current_rank and (
             current_rank.pk in removable_rank_ids or request.user.is_superuser
@@ -250,10 +264,8 @@ def member_detail(request, user_id):
     member_role_assignments = None
     all_roles = None
     if request.user.has_perm("hr.manage_roles"):
-        member_role_assignments = (
-            RoleAssignment.objects.filter(user=member_user)
-            .select_related("role", "assigned_by__profile__main_character")
-        )
+        # role_assignments prefetched above — no extra query needed
+        member_role_assignments = list(member_user.role_assignments.all())
         all_roles = Role.objects.all()
 
     return render(request, "hr/member_detail.html", {
@@ -399,7 +411,7 @@ def member_dashboard(request):
         AuditLog.objects.filter(user=user)
         .select_related("old_rank", "new_rank", "label", "performed_by__profile__main_character"),
         10,
-    ).page(1)
+    ).get_page(request.GET.get("audit_page"))
 
     try:
         teamspeak3_user = user.teamspeak3
@@ -577,7 +589,7 @@ def audit(request):
         "user__profile__main_character",
         "performed_by__profile__main_character",
         "old_rank", "new_rank",
-        "label",
+        "label", "role",
     )
 
     search = request.GET.get("search", "").strip()
@@ -606,7 +618,6 @@ def audit(request):
 # ---------------------------------------------------------------------------
 
 @login_required
-@login_required
 @permission_required("hr.access_hr")
 @require_POST
 def fix_member(request, user_id):
@@ -630,6 +641,7 @@ def fix_member(request, user_id):
     return redirect("hr:member_detail", user_id=user_id)
 
 
+@login_required
 @permission_required("hr.access_hr")
 @require_POST
 def snooze_warning(request, user_id):

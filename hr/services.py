@@ -655,6 +655,17 @@ def prepare_members(config):
         alerts = compute_member_alerts(user, config, all_titled_roles=all_titled_roles, all_titled_ranks=all_titled_ranks)
         labels = [a.label for a in user.hr_label_assignments.all()]
 
+        # Resolve the main character via the prefetched ownerships so the template
+        # can access characteraudit/characterroles/titles without extra DB queries.
+        main_titles = []
+        for o in user.character_ownerships.all():
+            if o.character and o.character.character_id == main.character_id:
+                try:
+                    main_titles = list(o.character.characteraudit.characterroles.titles.all())
+                except AttributeError:
+                    pass
+                break
+
         members.append({
             "user": user,
             "main": main,
@@ -662,6 +673,7 @@ def prepare_members(config):
             "alt_count": len(alts),
             "alerts": alerts,
             "labels": labels,
+            "main_titles": main_titles,
         })
 
     members.sort(key=lambda m: m["main"].character_name)

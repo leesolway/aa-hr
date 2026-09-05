@@ -38,4 +38,20 @@
     </div>
     {% endif %}
     {% block hr_content %}{% endblock hr_content %}
+    <script>
+    /* HR clipboard: clicking .hr-copy-name copies the character name to clipboard */
+    document.addEventListener('click', function(e) {
+        var target = e.target.closest('.hr-copy-name');
+        if (!target) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var name = target.dataset.name || target.textContent.trim();
+        if (!navigator.clipboard) return;
+        navigator.clipboard.writeText(name).then(function() {
+            var prev = target.style.opacity;
+            target.style.opacity = '0.4';
+            setTimeout(function() { target.style.opacity = prev || ''; }, 300);
+        });
+    });
+    </script>
 {% endblock content %}

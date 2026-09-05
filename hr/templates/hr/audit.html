@@ -89,12 +89,12 @@
                                 <span class="badge bg-secondary">{{ entry.old_rank.name }}</span>
                                 {% elif entry.action == 'status_set' %}
                                 {% if entry.old_status %}
-                                <span class="badge bg-secondary">{{ entry.old_status.name }}</span>
+                                <span class="badge bg-secondary">{{ entry.old_status|capfirst }}</span>
                                 <i class="fa-solid fa-arrow-right mx-1 text-muted small"></i>
                                 {% endif %}
-                                <span class="badge bg-warning text-dark">{{ entry.new_status.name }}</span>
+                                <span class="badge bg-warning text-dark">{{ entry.new_status|capfirst }}</span>
                                 {% elif entry.action == 'status_cleared' %}
-                                <span class="badge bg-secondary">{{ entry.old_status.name }}</span>
+                                <span class="badge bg-secondary">{{ entry.old_status|capfirst }}</span>
                                 {% elif entry.action == 'label_assigned' or entry.action == 'label_removed' %}
                                 {% if entry.label %}
                                 <span class="badge bg-light text-dark border">{{ entry.label.name }}</span>

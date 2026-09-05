@@ -127,7 +127,9 @@
                                      alt="{{ member.main.character_name }}">
                             </td>
                             <td>
-                                <a href="{% url 'hr:member_detail' member.user.pk %}" onclick="event.stopPropagation();">
+                                <a href="{% url 'hr:member_detail' member.user.pk %}"
+                                   class="hr-copy-name" data-name="{{ member.main.character_name }}"
+                                   title="{% trans 'Click to copy name' %}">
                                     {{ member.main.character_name }}
                                 </a>
                             </td>
@@ -252,7 +254,9 @@
                                      alt="{{ m.main.character_name }}">
                             </td>
                             <td>
-                                <a href="{% url 'hr:member_detail' m.user.pk %}" onclick="event.stopPropagation();">
+                                <a href="{% url 'hr:member_detail' m.user.pk %}"
+                                   class="hr-copy-name" data-name="{{ m.main.character_name }}"
+                                   title="{% trans 'Click to copy name' %}">
                                     {{ m.main.character_name }}
                                 </a>
                             </td>

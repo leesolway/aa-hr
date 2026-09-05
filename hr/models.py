@@ -40,6 +40,21 @@ class HrConfiguration(SingletonModel):
         related_name="+",
         help_text="AA group assigned to members on Break.",
     )
+    active_label = models.CharField(
+        max_length=50,
+        default="Active",
+        help_text="Display name for the Active status.",
+    )
+    away_label = models.CharField(
+        max_length=50,
+        default="Away",
+        help_text="Display name for the Away status.",
+    )
+    break_label = models.CharField(
+        max_length=50,
+        default="Break",
+        help_text="Display name for the Break status.",
+    )
 
     class Meta:
         verbose_name = "Configuration"
@@ -50,6 +65,22 @@ class HrConfiguration(SingletonModel):
             ("manage_ranks", "Can create and edit rank definitions"),
             ("manage_roles", "Can assign roles to users"),
         ]
+
+    def status_choices(self):
+        """Return status (value, label) pairs using the configured display names."""
+        return [
+            ("active", self.active_label),
+            ("away", self.away_label),
+            ("break", self.break_label),
+        ]
+
+    def status_label(self, status_value):
+        """Return the configured display label for a given status value."""
+        return {
+            "active": self.active_label,
+            "away": self.away_label,
+            "break": self.break_label,
+        }.get(status_value, status_value)
 
     @property
     def home_corporation_id(self):

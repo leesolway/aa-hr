@@ -46,7 +46,7 @@ Menu item visibility is controlled by checking permissions in
 |---|---|
 | `HrConfiguration` | Singleton (django-solo). Holds `aa_state` FK to `allianceauth.authentication.State`. Optional `home_corp` FK to `EveCorporationInfo` — when set, restricts member list to that corp's mains and scopes all character checks to that corp. |
 | `Rank` | Definition: name, priority, `auth_group` (1:1 Group), `corp_title` (FK → `corptools.CharacterTitle`), `is_active` |
-| `RankAssignment` | Per-user rank record. `is_current=True` = active rank. History kept by setting `is_current=False`. |
+| `RankAssignment` | Per-user rank record. OneToOne on user — one row per user, deleted on rank removal. Full history in `AuditLog`. |
 | `Role` | RBAC role for HR operators. `can_assign`/`can_remove` M2M → Rank. `auth_group` (1:1 Group, optional). `corp_title` (FK → `corptools.CharacterTitle`, optional). |
 | `RoleAssignment` | Links a user to a `Role`. User can hold multiple roles. |
 | `MemberStatusAssignment` | Active status for a user (one at most). Default `status='active'`; absent row and active row are equivalent. |
@@ -56,7 +56,7 @@ Menu item visibility is controlled by checking permissions in
 | `AuditLog` | Unified immutable audit log. Covers rank, status, label, and role actions. Written by service layer only. |
 | `DashboardSnooze` | Hides a user from the dashboard issues list. OneToOne user. Fields: `snoozed_by`, `snoozed_at`, `expires_at` (nullable), `note`. |
 
-One rank per user at a time (enforced in service layer, not DB constraint).
+One rank per user at a time (enforced by OneToOneField on `RankAssignment.user`).
 
 ### Service Layer (`services.py`)
 
@@ -73,8 +73,9 @@ All rank mutations go through here — never manipulate models directly from vie
 - `remove_role(user, role, performed_by)` — removes role and AA group; writes audit log; returns True/False
 - `assign_label(user, label, assigned_by, notes)` — idempotent; adds AA group, writes log
 - `remove_label(user, label, performed_by, notes)` — removes label and AA group; returns True/False
+- `get_rank_assignment(user)` — return `RankAssignment` or None (uses `select_related`)
 - `prepare_members(config)` — bulk queryset with prefetch for member list
-- `compute_member_alerts(user, config, all_titled_roles=None)` — returns alert dict for a single user
+- `compute_member_alerts(user, config, all_titled_ranks=None, all_titled_roles=None)` — returns `MemberAlerts` dataclass
 
 ### Title Sync
 
@@ -85,24 +86,38 @@ char.characteraudit.characterroles.titles.all()
 Compare `.title` string against `rank.corp_title.title` or `role.corp_title.title`. Uses `prefetch_related` in
 `prepare_members` to avoid N+1. corptools is the data source (read-only).
 
-### Alert keys returned by `compute_member_alerts`
+### `MemberAlerts` dataclass (`services.py`)
 
-| Key | Type | Meaning |
+`compute_member_alerts` returns a `MemberAlerts` instance. Access via `alerts.X` in views/templates.
+
+**Raw data fields** (set on construction):
+
+| Field | Type | Meaning |
 |---|---|---|
-| `rank` | `Rank` or None | Current rank |
-| `title_mismatch` | bool | Rank's corp_title not found on any home-corp character (suppressed on status) |
-| `missing_title_chars` | list[EveCharacter] | Characters missing the rank title |
-| `stale_title_chars` | list[EveCharacter] | Characters that still have the old/removed rank title |
-| `has_audit_issue` | bool | Any home-corp character has a stale or missing CharacterAudit |
-| `audit_issue_chars` | list[(char, "stale"\|"missing")] | Detail for audit issues |
-| `member_status` | `MemberStatusAssignment` or None | Active status |
-| `rank_removed_by_status` | bool | Break status is active and rank was removed by it |
-| `has_role_title_mismatch` | bool | User holds a Role with a corp_title but some characters lack that title |
-| `role_title_mismatches` | list[(Role, list[EveCharacter])] | Per-role missing characters |
-| `has_stale_role_title` | bool | Character has a title for a Role the user doesn't hold |
-| `stale_role_title_chars` | list[(Role, list[EveCharacter])] | Per-role characters with unattained title |
-| `has_group_issue` | bool | One or more HR assignments are missing their corresponding AA group |
-| `group_issues` | list[(str, str)] | `(kind, name)` tuples — kind is `"rank"`, `"role"`, `"label"`, or `"status"` |
+| `rank` | `RankAssignment` or None | Current rank assignment |
+| `member_status` | `MemberStatusAssignment` or None | Active status row |
+| `missing_title_chars` | `list[EveCharacter]` | Characters missing the rank's corp title |
+| `audit_issue_chars` | `list[(char, "stale"\|"missing")]` | Characters with stale/missing CharacterAudit |
+| `role_title_mismatches` | `list[(Role, list[EveCharacter])]` | Roles whose corp title is absent on some characters |
+| `unentitled_rank_title_chars` | `list[(Rank, list[EveCharacter])]` | In-game rank titles held without the matching HR rank |
+| `unentitled_role_title_chars` | `list[(Role, list[EveCharacter])]` | In-game role titles held without the matching HR role |
+| `group_issues` | `list[(str, str)]` | `(kind, name)` — missing AA group per assignment |
+
+**Computed properties** (business logic):
+
+| Property | Meaning |
+|---|---|
+| `on_status` | Member has a non-active status (AWAY or BREAK) |
+| `rank_removed_by_status` | BREAK status is active and user has no rank (suppresses `has_no_rank_issue`) |
+| `title_mismatch_suppressed` | Member is on AWAY or BREAK — title alerts are not actionable |
+| `has_no_rank_issue` | No rank and not explained by status |
+| `has_title_mismatch` | Rank title absent on characters (suppressed on status) |
+| `has_audit_issue` | Any home-corp character has stale/missing audit data |
+| `has_role_title_mismatch` | User holds a Role whose corp_title some characters lack |
+| `has_unentitled_rank_title` | Character holds an in-game title mapped to a rank the user doesn't have |
+| `has_unentitled_role_title` | Character holds an in-game title mapped to a role the user doesn't hold |
+| `has_group_issue` | One or more HR assignments are missing their AA group |
+| `has_any_issue` | Any of the above is true — single canonical "show in issues list" flag |
 
 ### Permissions
 

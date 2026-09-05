@@ -34,6 +34,13 @@ def is_in(value, collection):
 
 @register.simple_tag
 def get_status_choices():
-    """Return MemberStatusAssignment.STATUS_CHOICES for use in templates."""
-    from hr.models import MemberStatusAssignment
-    return MemberStatusAssignment.STATUS_CHOICES
+    """Return status (value, label) pairs using the configured display names."""
+    from hr.models import HrConfiguration
+    return HrConfiguration.get_solo().status_choices()
+
+
+@register.simple_tag
+def status_label(status_value):
+    """Return the configured display label for a status value."""
+    from hr.models import HrConfiguration
+    return HrConfiguration.get_solo().status_label(status_value)

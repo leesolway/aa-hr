@@ -6,8 +6,9 @@
 {% block hr_content %}
 <div class="container-fluid mt-3">
     <div class="mb-3">
-        <a href="{% url 'hr:member_list' %}" class="btn btn-sm btn-secondary">
-            <i class="fa-solid fa-arrow-left"></i> {% trans "Back to Members" %}
+        <a href="{% url 'hr:member_list' %}" class="btn btn-sm btn-secondary"
+           onclick="if (history.length > 1) { history.back(); return false; }">
+            <i class="fa-solid fa-arrow-left"></i> {% trans "Back" %}
         </a>
     </div>
 
@@ -263,7 +264,7 @@
                             <img src="{% eve_image 'character' char.character_id 32 %}"
                                  class="rounded me-1" width="20" height="20" loading="lazy"
                                  alt="{{ char.character_name }}">
-                            {{ char.character_name }}
+                            <span class="hr-copy-name" data-name="{{ char.character_name }}" title="{% trans 'Click to copy name' %}" style="cursor:pointer;">{{ char.character_name }}</span>
                         </li>
                         {% endfor %}
                     </ul>
@@ -295,7 +296,7 @@
                             <img src="{% eve_image 'character' char.character_id 32 %}"
                                  class="rounded me-1" width="20" height="20" loading="lazy"
                                  alt="{{ char.character_name }}">
-                            {{ char.character_name }}
+                            <span class="hr-copy-name" data-name="{{ char.character_name }}" title="{% trans 'Click to copy name' %}" style="cursor:pointer;">{{ char.character_name }}</span>
                         </li>
                         {% endfor %}
                     </ul>
@@ -323,7 +324,7 @@
                             <img src="{% eve_image 'character' char.character_id 32 %}"
                                  class="rounded me-1" width="20" height="20" loading="lazy"
                                  alt="{{ char.character_name }}">
-                            {{ char.character_name }}
+                            <span class="hr-copy-name" data-name="{{ char.character_name }}" title="{% trans 'Click to copy name' %}" style="cursor:pointer;">{{ char.character_name }}</span>
                         </li>
                         {% endfor %}
                     </ul>
@@ -352,7 +353,7 @@
                             <img src="{% eve_image 'character' char.character_id 32 %}"
                                  class="rounded me-1" width="20" height="20" loading="lazy"
                                  alt="{{ char.character_name }}">
-                            {{ char.character_name }}
+                            <span class="hr-copy-name" data-name="{{ char.character_name }}" title="{% trans 'Click to copy name' %}" style="cursor:pointer;">{{ char.character_name }}</span>
                         </li>
                         {% endfor %}
                     </ul>
@@ -411,7 +412,7 @@
                                 <td><img src="{% eve_image 'character' char.character_id 32 %}"
                                          class="rounded" width="32" height="32" loading="lazy"
                                          alt="{{ char.character_name }}"></td>
-                                <td>{{ char.character_name }}</td>
+                                <td><span class="hr-copy-name" data-name="{{ char.character_name }}" title="{% trans 'Click to copy name' %}" style="cursor:pointer;">{{ char.character_name }}</span></td>
                                 <td>
                                     {% if kind == "missing" %}
                                     <span class="badge bg-danger">{% trans "No audit" %}</span>
@@ -454,7 +455,7 @@
                             <td><img src="{% eve_image 'character' alt.character_id 32 %}"
                                      class="rounded" width="32" height="32" loading="lazy"
                                      alt="{{ alt.character_name }}"></td>
-                            <td>{{ alt.character_name }}</td>
+                            <td><span class="hr-copy-name" data-name="{{ alt.character_name }}" title="{% trans 'Click to copy name' %}" style="cursor:pointer;">{{ alt.character_name }}</span></td>
                             <td>
                                 <img src="{% eve_image 'corporation' alt.corporation_id 32 %}"
                                      class="rounded" width="20" height="20" loading="lazy"

@@ -1,4 +1,4 @@
-{% load i18n %}
+{% load i18n hr_tags %}
 <div class="card">
     <div class="card-header"><h6 class="mb-0">{% trans "Overview" %}</h6></div>
     <div class="card-body p-0">
@@ -22,7 +22,7 @@
                     <td class="align-middle">
                         {% if alerts.member_status %}
                         <span class="badge bg-warning text-dark fs-6">
-                            <i class="fa-solid fa-clock"></i> {{ alerts.member_status.get_status_display }}
+                            <i class="fa-solid fa-clock"></i> {% status_label alerts.member_status.status %}
                         </span>
                         {% if alerts.member_status.notes %}
                         <span class="text-muted small ms-2">{{ alerts.member_status.notes }}</span>
@@ -32,7 +32,7 @@
                             {% if alerts.member_status.set_by %}{% trans "by" %} {{ alerts.member_status.set_by }}{% endif %}
                         </div>
                         {% else %}
-                        <span class="text-muted">{% trans "Active" %}</span>
+                        <span class="text-muted">{% status_label "active" %}</span>
                         {% endif %}
                     </td>
                 </tr>

@@ -54,6 +54,7 @@
                             <th>{% trans "Rank" %}</th>
                             <th class="text-center">{% trans "Alts" %}</th>
                             <th>{% trans "Titles" %}</th>
+                            <th class="text-center" style="width:80px;">{% trans "Snoozed" %}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -67,7 +68,9 @@
                                      alt="{{ member.main.character_name }}">
                             </td>
                             <td>
-                                <a href="{% url 'hr:member_detail' member.user.pk %}" onclick="event.stopPropagation();">
+                                <a href="{% url 'hr:member_detail' member.user.pk %}"
+                                   class="hr-copy-name" data-name="{{ member.main.character_name }}"
+                                   title="{% trans 'Click to copy name' %}">
                                     {{ member.main.character_name }}
                                 </a>
                             </td>
@@ -105,10 +108,21 @@
                                 {% endif %}
                             </td>
                             <td>
-                                {% if member.main.characteraudit.characterroles.titles.all %}
+                                {% if member.main_titles %}
                                 <small class="text-muted">
-                                    {% for t in member.main.characteraudit.characterroles.titles.all %}{{ t.title }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                                    {% for t in member.main_titles %}{{ t.title }}{% if not forloop.last %}, {% endif %}{% endfor %}
                                 </small>
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if member.snooze %}
+                                <span class="badge bg-secondary"
+                                      title="{{ member.snooze.note }}{% if member.snooze.expires_at %} · {% trans 'until' %} {{ member.snooze.expires_at|date:'Y-m-d' }}{% endif %}"
+                                      data-bs-toggle="tooltip">
+                                    <i class="fa-solid fa-bell-slash"></i>
+                                </span>
                                 {% else %}
                                 <span class="text-muted">—</span>
                                 {% endif %}
@@ -116,7 +130,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="6" class="text-center text-muted py-4">{% trans "No members found." %}</td>
+                            <td colspan="7" class="text-center text-muted py-4">{% trans "No members found." %}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -133,7 +147,7 @@
                     <ul class="pagination pagination-sm mb-0">
                         {% if page_obj.has_previous %}
                         <li class="page-item">
-                            <a class="page-link" href="?search={{ search }}&rank={{ rank_filter }}&mismatch={{ mismatch_filter }}&page={{ page_obj.previous_page_number }}">&laquo;</a>
+                            <a class="page-link" href="?search={{ search }}&rank={{ rank_filter }}&mismatch={{ mismatch_filter }}&audit_issue={{ audit_filter }}&group_issue={{ group_issue_filter }}&page={{ page_obj.previous_page_number }}">&laquo;</a>
                         </li>
                         {% else %}
                         <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
@@ -142,16 +156,16 @@
                             {% if page_obj.number == num %}
                             <li class="page-item active"><span class="page-link">{{ num }}</span></li>
                             {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %}
-                            <li class="page-item"><a class="page-link" href="?search={{ search }}&rank={{ rank_filter }}&mismatch={{ mismatch_filter }}&page={{ num }}">{{ num }}</a></li>
+                            <li class="page-item"><a class="page-link" href="?search={{ search }}&rank={{ rank_filter }}&mismatch={{ mismatch_filter }}&audit_issue={{ audit_filter }}&group_issue={{ group_issue_filter }}&page={{ num }}">{{ num }}</a></li>
                             {% elif num == 1 or num == page_obj.paginator.num_pages %}
-                            <li class="page-item"><a class="page-link" href="?search={{ search }}&rank={{ rank_filter }}&mismatch={{ mismatch_filter }}&page={{ num }}">{{ num }}</a></li>
+                            <li class="page-item"><a class="page-link" href="?search={{ search }}&rank={{ rank_filter }}&mismatch={{ mismatch_filter }}&audit_issue={{ audit_filter }}&group_issue={{ group_issue_filter }}&page={{ num }}">{{ num }}</a></li>
                             {% elif num == page_obj.number|add:"-3" or num == page_obj.number|add:"3" %}
                             <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
                             {% endif %}
                         {% endfor %}
                         {% if page_obj.has_next %}
                         <li class="page-item">
-                            <a class="page-link" href="?search={{ search }}&rank={{ rank_filter }}&mismatch={{ mismatch_filter }}&page={{ page_obj.next_page_number }}">&raquo;</a>
+                            <a class="page-link" href="?search={{ search }}&rank={{ rank_filter }}&mismatch={{ mismatch_filter }}&audit_issue={{ audit_filter }}&group_issue={{ group_issue_filter }}&page={{ page_obj.next_page_number }}">&raquo;</a>
                         </li>
                         {% else %}
                         <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
