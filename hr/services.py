@@ -227,8 +227,8 @@ def remove_role(user, role, performed_by):
 
 def get_status_auth_group(config, status):
     """Return the AA Group for the given status string, or None."""
-    if status == MemberStatusAssignment.BREAK:
-        return config.break_auth_group
+    if status == MemberStatusAssignment.INACTIVE:
+        return config.inactive_auth_group
     if status == MemberStatusAssignment.AWAY:
         return config.away_auth_group
     return None
@@ -238,7 +238,7 @@ def set_member_status(user, status, set_by, notes=""):
     """Apply a status ('away' or 'break') to a user.
 
     - Swaps AA group membership.
-    - Removes rank and clears roles atomically when status is Break.
+    - Removes rank and clears roles atomically when status is Inactive.
     """
     config = HrConfiguration.get_solo()
     new_group = get_status_auth_group(config, status)
@@ -393,13 +393,13 @@ class MemberAlerts:
 
     @property
     def rank_removed_by_status(self):
-        """True when BREAK status caused the rank to be removed."""
-        return self.on_status == MemberStatusAssignment.BREAK and not self.rank
+        """True when Inactive status caused the rank to be removed."""
+        return self.on_status == MemberStatusAssignment.INACTIVE and not self.rank
 
     @property
     def title_mismatch_suppressed(self):
         """Title mismatches are not actionable while a member is on leave."""
-        return self.on_status in {MemberStatusAssignment.AWAY, MemberStatusAssignment.BREAK}
+        return self.on_status in {MemberStatusAssignment.AWAY, MemberStatusAssignment.INACTIVE}
 
     # ------------------------------------------------------------------
     # Issue flags — these are the canonical names used by views/templates
@@ -584,8 +584,8 @@ def compute_member_alerts(user, config, all_titled_roles=None, all_titled_ranks=
             group_issues.append(("label", la.label.name))
 
     if member_status:
-        if member_status.status == MemberStatusAssignment.BREAK:
-            status_group_id = config.break_auth_group_id
+        if member_status.status == MemberStatusAssignment.INACTIVE:
+            status_group_id = config.inactive_auth_group_id
         elif member_status.status == MemberStatusAssignment.AWAY:
             status_group_id = config.away_auth_group_id
         else:
@@ -730,8 +730,8 @@ def fix_groups(user, performed_by):
     managed_ids.update(MemberLabel.objects.filter(auth_group__isnull=False).values_list("auth_group_id", flat=True))
     if config.away_auth_group_id:
         managed_ids.add(config.away_auth_group_id)
-    if config.break_auth_group_id:
-        managed_ids.add(config.break_auth_group_id)
+    if config.inactive_auth_group_id:
+        managed_ids.add(config.inactive_auth_group_id)
 
     added = []
     removed = []

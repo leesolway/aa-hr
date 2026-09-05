@@ -100,7 +100,7 @@ def sync_group_removal(sender, instance, action, pk_set, **kwargs):
         # Clear status if its group was revoked externally
         config = HrConfiguration.get_solo()
         status_to_clear = None
-        for status_val in (MemberStatusAssignment.AWAY, MemberStatusAssignment.BREAK):
+        for status_val in (MemberStatusAssignment.AWAY, MemberStatusAssignment.INACTIVE):
             grp = get_status_auth_group(config, status_val)
             if grp and grp.pk in group_pk_set:
                 status_to_clear = status_val

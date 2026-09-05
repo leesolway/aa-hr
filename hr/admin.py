@@ -23,6 +23,32 @@ User = get_user_model()
 
 @admin.register(HrConfiguration)
 class HrConfigurationAdmin(admin.ModelAdmin):
+    fieldsets = [
+        ("General", {
+            "fields": ["aa_state", "home_corp"],
+        }),
+        ("Status Groups", {
+            "fields": ["away_auth_group", "inactive_auth_group"],
+            "description": (
+                "AA groups assigned when a member's status is set. "
+                "These groups are synced to Discord roles by the Discord service."
+            ),
+        }),
+        ("Status Display Labels", {
+            "fields": ["active_label", "away_label", "inactive_label"],
+            "description": "Customise the display names shown in the UI for each status.",
+        }),
+        ("Inactive", {
+            "fields": ["inactivity_threshold_days"],
+            "description": (
+                "Inactive status represents a member taking a break from the game. "
+                "When a threshold is set, a nightly Celery task will automatically apply "
+                "Inactive status to any member whose most recent EVE login (across all "
+                "characters) exceeds the configured number of days. "
+                "Members already on any non-active status are not affected."
+            ),
+        }),
+    ]
     actions = ["backfill_ranks_from_titles"]
 
     @admin.action(description="Backfill ranks from in-game titles (skips users already ranked)")

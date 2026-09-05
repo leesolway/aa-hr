@@ -32,13 +32,13 @@ class HrConfiguration(SingletonModel):
         related_name="+",
         help_text="AA group assigned to members with Away status.",
     )
-    break_auth_group = models.ForeignKey(
+    inactive_auth_group = models.ForeignKey(
         "auth.Group",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="+",
-        help_text="AA group assigned to members on Break.",
+        help_text="AA group assigned to members with Inactive status.",
     )
     active_label = models.CharField(
         max_length=50,
@@ -50,10 +50,18 @@ class HrConfiguration(SingletonModel):
         default="Away",
         help_text="Display name for the Away status.",
     )
-    break_label = models.CharField(
+    inactive_label = models.CharField(
         max_length=50,
-        default="Break",
-        help_text="Display name for the Break status.",
+        default="Inactive",
+        help_text="Display name for the Inactive status.",
+    )
+    inactivity_threshold_days = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Automatically apply Inactive status to members whose most recent EVE login "
+            "(across all characters) exceeds this many days. Leave blank to disable."
+        ),
     )
 
     class Meta:
@@ -71,7 +79,7 @@ class HrConfiguration(SingletonModel):
         return [
             ("active", self.active_label),
             ("away", self.away_label),
-            ("break", self.break_label),
+            ("break", self.inactive_label),
         ]
 
     def status_label(self, status_value):
@@ -79,7 +87,7 @@ class HrConfiguration(SingletonModel):
         return {
             "active": self.active_label,
             "away": self.away_label,
-            "break": self.break_label,
+            "break": self.inactive_label,
         }.get(status_value, status_value)
 
     @property
@@ -217,22 +225,22 @@ class MemberStatusAssignment(models.Model):
     is considered active. Views map an 'active' submission to
     clear_member_status(), which deletes the row to normalise state, but if
     an 'active' row persists (e.g. created via admin) all service and
-    display logic handles it correctly. AWAY and BREAK add the member to a
-    status group and suppress dashboard title-mismatch alerts. BREAK
+    display logic handles it correctly. AWAY and INACTIVE add the member to a
+    status group and suppress dashboard title-mismatch alerts. INACTIVE
     additionally removes rank and all role assignments.
     """
 
     ACTIVE = "active"
     AWAY = "away"
-    BREAK = "break"
+    INACTIVE = "break"
     STATUS_CHOICES = [
         (ACTIVE, "Active"),
         (AWAY, "Away"),
-        (BREAK, "Break"),
+        (INACTIVE, "Inactive"),
     ]
 
     # Behaviour constants — no DB flags needed
-    REMOVES_RANK = frozenset({BREAK})
+    REMOVES_RANK = frozenset({INACTIVE})
 
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
