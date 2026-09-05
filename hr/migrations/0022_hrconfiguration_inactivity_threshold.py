@@ -4,7 +4,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("hr", "0021_hrconfiguration_status_labels"),
+        ("hr", "0022_alter_memberlabel_options_and_more"),
     ]
 
     operations = [
