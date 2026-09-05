@@ -15,6 +15,7 @@ urlpatterns = [
     path("user/<int:user_id>/set-status/", views.set_status, name="set_status"),
     path("user/<int:user_id>/set-label/", views.set_label, name="set_label"),
     path("user/<int:user_id>/set-role/", views.set_role, name="set_role"),
+    path("alliance-alts/", views.alliance_alts, name="alliance_alts"),
     path("unregistered/", views.unregistered, name="unregistered"),
     path("audit/", views.audit, name="audit"),
     path("user/<int:user_id>/fix/", views.fix_member, name="fix_member"),

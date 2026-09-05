@@ -1,0 +1,160 @@
+{% extends 'hr/base.html' %}
+{% load i18n hr_tags %}
+
+{% block page_title %}{% trans "HR — Alliance Alt Issues" %}{% endblock %}
+
+{% block hr_content %}
+<div class="container-fluid mt-3">
+    {% if not state %}
+    <div class="alert alert-warning">
+        {% trans "No state or home corporation has been configured for the HR module." %}
+    </div>
+    {% else %}
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0">
+            {% trans "Alliance Alt Issues" %}
+            <small class="text-muted fs-6 ms-2">{% trans "Non-" %}{{ home_corp.corporation_name }} {% trans "alliance characters" %}</small>
+        </h5>
+        <form method="get" class="d-flex gap-2">
+            <input type="text" name="search" class="form-control form-control-sm"
+                   placeholder="{% trans 'Search character name...' %}" value="{{ search }}" style="width:220px;">
+            <button type="submit" class="btn btn-sm btn-primary">{% trans "Search" %}</button>
+            {% if search %}<a href="{% url 'hr:alliance_alts' %}" class="btn btn-sm btn-secondary">{% trans "Clear" %}</a>{% endif %}
+        </form>
+    </div>
+
+    {# ── Registered: main not in home corp ─────────────────────────────── #}
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>
+                <i class="fa-solid fa-right-from-bracket me-1"></i>
+                {% trans "Registered — Main Not in Home Corp" %}
+            </span>
+            <span class="badge bg-warning text-dark">{{ registered_issues|length }}</span>
+        </div>
+        <div class="card-body p-0">
+            {% if registered_issues %}
+            <div class="table-responsive">
+                <table class="table table-hover table-sm mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th style="width:40px;"></th>
+                            <th>{% trans "Character" %}</th>
+                            <th>{% trans "Corporation" %}</th>
+                            <th style="width:40px;"></th>
+                            <th>{% trans "Account Main" %}</th>
+                            <th>{% trans "Main's Corporation" %}</th>
+                            <th style="width:80px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for char in registered_issues %}
+                        {% with owner=char.character_ownership.user main=char.character_ownership.user.profile.main_character %}
+                        <tr>
+                            <td>
+                                <img src="{% eve_image 'character' char.character_id 32 %}"
+                                     class="rounded" width="32" height="32" loading="lazy"
+                                     alt="{{ char.character_name }}">
+                            </td>
+                            <td class="align-middle">{{ char.character_name }}</td>
+                            <td class="align-middle">
+                                <img src="{% eve_image 'corporation' char.corporation_id 32 %}"
+                                     class="rounded me-1" width="20" height="20" loading="lazy"
+                                     alt="{{ char.corporation_name }}">
+                                {{ char.corporation_name }}
+                            </td>
+                            <td class="align-middle text-center text-muted">→</td>
+                            <td class="align-middle">
+                                {% if main %}
+                                <img src="{% eve_image 'character' main.character_id 32 %}"
+                                     class="rounded me-1" width="20" height="20" loading="lazy"
+                                     alt="{{ main.character_name }}">
+                                {{ main.character_name }}
+                                {% else %}
+                                <span class="text-muted fst-italic">{% trans "No main set" %}</span>
+                                {% endif %}
+                            </td>
+                            <td class="align-middle">
+                                {% if main %}
+                                <img src="{% eve_image 'corporation' main.corporation_id 32 %}"
+                                     class="rounded me-1" width="20" height="20" loading="lazy"
+                                     alt="{{ main.corporation_name }}">
+                                {{ main.corporation_name }}
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="align-middle">
+                                <a href="{% url 'hr:member_detail' owner.pk %}" class="btn btn-sm btn-outline-secondary">
+                                    {% trans "View" %}
+                                </a>
+                            </td>
+                        </tr>
+                        {% endwith %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center text-muted py-4">
+                <i class="fa-solid fa-circle-check text-success me-1"></i> {% trans "No issues found." %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {# ── Unregistered ──────────────────────────────────────────────────── #}
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>
+                <i class="fa-solid fa-user-slash me-1"></i>
+                {% trans "Unregistered" %}
+            </span>
+            <span class="badge bg-secondary">{{ unregistered|length }}</span>
+        </div>
+        <div class="card-body p-0">
+            {% if unregistered %}
+            <p class="text-muted small px-3 pt-2 mb-0">
+                {% trans "Characters AA knows about in non-home-corp alliance corps with no registered owner. Coverage depends on corp ESI tokens being configured." %}
+            </p>
+            <div class="table-responsive">
+                <table class="table table-hover table-sm mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th style="width:40px;"></th>
+                            <th>{% trans "Character" %}</th>
+                            <th>{% trans "Corporation" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for char in unregistered %}
+                        <tr>
+                            <td>
+                                <img src="{% eve_image 'character' char.character_id 32 %}"
+                                     class="rounded" width="32" height="32" loading="lazy"
+                                     alt="{{ char.character_name }}">
+                            </td>
+                            <td class="align-middle">{{ char.character_name }}</td>
+                            <td class="align-middle">
+                                <img src="{% eve_image 'corporation' char.corporation_id 32 %}"
+                                     class="rounded me-1" width="20" height="20" loading="lazy"
+                                     alt="{{ char.corporation_name }}">
+                                {{ char.corporation_name }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center text-muted py-4">
+                <i class="fa-solid fa-circle-check text-success me-1"></i> {% trans "No unregistered characters found." %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% endif %}
+</div>
+{% endblock %}

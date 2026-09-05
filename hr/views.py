@@ -21,6 +21,7 @@ from .services import (
     clear_member_status,
     compute_member_alerts,
     fix_groups,
+    get_alliance_alt_issues,
     get_current_rank,
     get_effective_assignable_ranks,
     get_effective_removable_rank_ids,
@@ -122,6 +123,8 @@ def dashboard(request):
     has_snoozed = bool(snoozed_ids & {m["user"].pk for m in all_issue_members})
     unregistered_count = _unregistered_chars_qs(config.aa_state).count()
     departed_members = get_main_left_corp_members(config)
+    alliance_unregistered, alliance_registered_issues = get_alliance_alt_issues(config)
+    alliance_alt_issue_count = len(alliance_unregistered) + len(alliance_registered_issues)
 
     return render(request, "hr/dashboard.html", {
         "state": config.aa_state,
@@ -136,6 +139,7 @@ def dashboard(request):
         "show_snoozed": show_snoozed,
         "has_snoozed": has_snoozed,
         "unregistered_count": unregistered_count,
+        "alliance_alt_issue_count": alliance_alt_issue_count,
     })
 
 
@@ -153,9 +157,12 @@ def member_list(request):
 
     members = prepare_members(config)
     all_ranks = Rank.objects.filter(is_active=True)
+    all_labels = MemberLabel.objects.filter(is_active=True).order_by("name")
 
     rank_filter = request.GET.get("rank", "")
     mismatch_filter = request.GET.get("mismatch", "")
+    status_filter = request.GET.get("status", "")
+    label_filter = request.GET.get("label", "")
     search = request.GET.get("search", "").strip().lower()
 
     if rank_filter == "none":
@@ -173,6 +180,21 @@ def member_list(request):
     group_issue_filter = request.GET.get("group_issue", "")
     if group_issue_filter == "1":
         members = [m for m in members if m["alerts"].has_group_issue]
+
+    if status_filter == "active":
+        members = [m for m in members if not m["alerts"].member_status]
+    elif status_filter in ("away", "break"):
+        members = [
+            m for m in members
+            if m["alerts"].member_status and m["alerts"].member_status.status == status_filter
+        ]
+
+    if label_filter.isdigit():
+        label_pk = int(label_filter)
+        members = [
+            m for m in members
+            if any(a.label_id == label_pk for a in m["user"].hr_label_assignments.all())
+        ]
 
     if search:
         members = [
@@ -195,10 +217,14 @@ def member_list(request):
         "page_obj": page_obj,
         "member_count": len(members),
         "all_ranks": all_ranks,
+        "all_labels": all_labels,
         "rank_filter": rank_filter,
         "mismatch_filter": mismatch_filter,
         "audit_filter": audit_filter,
         "group_issue_filter": group_issue_filter,
+        "status_filter": status_filter,
+        "label_filter": label_filter,
+        "status_choices": config.status_choices(),
         "search": request.GET.get("search", ""),
     })
 
@@ -545,6 +571,36 @@ def set_role(request, user_id):
 
     return redirect("hr:member_detail", user_id=user_id)
 
+
+
+# ---------------------------------------------------------------------------
+# Alliance alt issues
+# ---------------------------------------------------------------------------
+
+@login_required
+@permission_required("hr.access_hr")
+def alliance_alts(request):
+    config = HrConfiguration.get_solo()
+
+    if not config.aa_state or not config.home_corporation_id:
+        return render(request, "hr/alliance_alts.html", {"state": None})
+
+    unregistered, registered_issues = get_alliance_alt_issues(config)
+
+    search = request.GET.get("search", "").strip().lower()
+    if search:
+        unregistered = [c for c in unregistered if search in c.character_name.lower()]
+        registered_issues = [
+            c for c in registered_issues if search in c.character_name.lower()
+        ]
+
+    return render(request, "hr/alliance_alts.html", {
+        "state": config.aa_state,
+        "home_corp": config.home_corp,
+        "unregistered": unregistered,
+        "registered_issues": registered_issues,
+        "search": request.GET.get("search", ""),
+    })
 
 
 # ---------------------------------------------------------------------------

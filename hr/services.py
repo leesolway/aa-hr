@@ -3,7 +3,9 @@ from dataclasses import dataclass
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
+from django.db.models import Q
 
+from allianceauth.eveonline.models import EveCharacter
 from allianceauth.services.hooks import get_extension_logger
 
 from .models import (
@@ -769,6 +771,47 @@ def fix_groups(user, performed_by):
         aa_update_character.apply_async(args=[char_id], priority=4)
 
     return added, removed
+
+
+def get_alliance_alt_issues(config):
+    """Return characters in non-home-corp state members that need attention.
+
+    Returns a tuple (unregistered, registered_issues):
+    - unregistered: EveCharacter list — no CharacterOwnership at all.
+      Only covers chars AA already knows about (requires corp tokens for full coverage).
+    - registered_issues: list of EveCharacter — has an owner, but that user's
+      main is not in the home corp (or user has no main set).
+
+    Requires both home_corp and aa_state to be configured.
+    """
+    if not config.aa_state or not config.home_corporation_id:
+        return [], []
+
+    home_corp_id = config.home_corporation_id
+    state = config.aa_state
+
+    corp_ids = list(state.member_corporations.values_list("corporation_id", flat=True))
+    alliance_ids = list(state.member_alliances.values_list("alliance_id", flat=True))
+
+    non_home = EveCharacter.objects.filter(
+        Q(corporation_id__in=corp_ids) | Q(alliance_id__in=alliance_ids)
+    ).exclude(corporation_id=home_corp_id)
+
+    unregistered = list(
+        non_home.filter(character_ownership__isnull=True)
+        .order_by("corporation_name", "character_name")
+    )
+
+    registered_issues = list(
+        non_home.filter(character_ownership__isnull=False)
+        .exclude(
+            character_ownership__user__profile__main_character__corporation_id=home_corp_id
+        )
+        .select_related("character_ownership__user__profile__main_character")
+        .order_by("corporation_name", "character_name")
+    )
+
+    return unregistered, registered_issues
 
 
 def get_main_left_corp_members(config):

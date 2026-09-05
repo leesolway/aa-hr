@@ -85,6 +85,18 @@
                 </div>
             </a>
         </div>
+        {% if alliance_alt_issue_count %}
+        <div class="col-sm-6 col-xl-3">
+            <a href="{% url 'hr:alliance_alts' %}" class="text-decoration-none">
+                <div class="card h-100 border-warning">
+                    <div class="card-body text-center">
+                        <div class="text-muted small text-uppercase">{% trans "Alliance Alt Issues" %}</div>
+                        <div class="fs-2 fw-bold text-warning">{{ alliance_alt_issue_count }}</div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endif %}
         {% if departed_count %}
         <div class="col-sm-6 col-xl-3">
             <a href="#departed-members" class="text-decoration-none">
@@ -146,7 +158,7 @@
                                 <span class="text-muted">{% trans "No rank" %}</span>
                                 {% endif %}
                                 {% if member.alerts.member_status %}
-                                <span class="badge bg-warning text-dark ms-1">{{ member.alerts.member_status.get_status_display }}</span>
+                                <span class="badge bg-warning text-dark ms-1">{% status_label member.alerts.member_status.status %}</span>
                                 {% endif %}
                             </td>
                             <td>

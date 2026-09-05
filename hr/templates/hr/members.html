@@ -18,11 +18,11 @@
         </div>
         <div class="card-body p-3 pb-0">
             <form method="get" class="row g-2 align-items-end">
-                <div class="col-sm-4">
+                <div class="col-sm-3">
                     <input type="text" name="search" class="form-control form-control-sm"
                            placeholder="{% trans 'Search name or alt...' %}" value="{{ search }}">
                 </div>
-                <div class="col-sm-3">
+                <div class="col-sm-2">
                     <select name="rank" class="form-select form-select-sm">
                         <option value="">{% trans "All ranks" %}</option>
                         <option value="none" {% if rank_filter == 'none' %}selected{% endif %}>{% trans "No rank" %}</option>
@@ -31,7 +31,23 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col-sm-3">
+                <div class="col-sm-2">
+                    <select name="status" class="form-select form-select-sm">
+                        <option value="">{% trans "All statuses" %}</option>
+                        {% for value, label in status_choices %}
+                        <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-sm-2">
+                    <select name="label" class="form-select form-select-sm">
+                        <option value="">{% trans "All labels" %}</option>
+                        {% for lbl in all_labels %}
+                        <option value="{{ lbl.pk }}" {% if label_filter == lbl.pk|stringformat:'s' %}selected{% endif %}>{{ lbl.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-sm-2">
                     <select name="mismatch" class="form-select form-select-sm">
                         <option value="">{% trans "All" %}</option>
                         <option value="1" {% if mismatch_filter == '1' %}selected{% endif %}>{% trans "Title mismatch only" %}</option>
@@ -96,7 +112,7 @@
                                 {% endif %}
                                 {% if member.alerts.member_status %}
                                 <span class="badge bg-warning text-dark ms-1">
-                                    <i class="fa-solid fa-clock"></i> {{ member.alerts.member_status.get_status_display }}
+                                    <i class="fa-solid fa-clock"></i> {% status_label member.alerts.member_status.status %}
                                 </span>
                                 {% endif %}
                             </td>
@@ -147,7 +163,7 @@
                     <ul class="pagination pagination-sm mb-0">
                         {% if page_obj.has_previous %}
                         <li class="page-item">
-                            <a class="page-link" href="?search={{ search }}&rank={{ rank_filter }}&mismatch={{ mismatch_filter }}&audit_issue={{ audit_filter }}&group_issue={{ group_issue_filter }}&page={{ page_obj.previous_page_number }}">&laquo;</a>
+                            <a class="page-link" href="?search={{ search }}&rank={{ rank_filter }}&mismatch={{ mismatch_filter }}&audit_issue={{ audit_filter }}&group_issue={{ group_issue_filter }}&status={{ status_filter }}&label={{ label_filter }}&page={{ page_obj.previous_page_number }}">&laquo;</a>
                         </li>
                         {% else %}
                         <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
@@ -156,16 +172,16 @@
                             {% if page_obj.number == num %}
                             <li class="page-item active"><span class="page-link">{{ num }}</span></li>
                             {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %}
-                            <li class="page-item"><a class="page-link" href="?search={{ search }}&rank={{ rank_filter }}&mismatch={{ mismatch_filter }}&audit_issue={{ audit_filter }}&group_issue={{ group_issue_filter }}&page={{ num }}">{{ num }}</a></li>
+                            <li class="page-item"><a class="page-link" href="?search={{ search }}&rank={{ rank_filter }}&mismatch={{ mismatch_filter }}&audit_issue={{ audit_filter }}&group_issue={{ group_issue_filter }}&status={{ status_filter }}&label={{ label_filter }}&page={{ num }}">{{ num }}</a></li>
                             {% elif num == 1 or num == page_obj.paginator.num_pages %}
-                            <li class="page-item"><a class="page-link" href="?search={{ search }}&rank={{ rank_filter }}&mismatch={{ mismatch_filter }}&audit_issue={{ audit_filter }}&group_issue={{ group_issue_filter }}&page={{ num }}">{{ num }}</a></li>
+                            <li class="page-item"><a class="page-link" href="?search={{ search }}&rank={{ rank_filter }}&mismatch={{ mismatch_filter }}&audit_issue={{ audit_filter }}&group_issue={{ group_issue_filter }}&status={{ status_filter }}&label={{ label_filter }}&page={{ num }}">{{ num }}</a></li>
                             {% elif num == page_obj.number|add:"-3" or num == page_obj.number|add:"3" %}
                             <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
                             {% endif %}
                         {% endfor %}
                         {% if page_obj.has_next %}
                         <li class="page-item">
-                            <a class="page-link" href="?search={{ search }}&rank={{ rank_filter }}&mismatch={{ mismatch_filter }}&audit_issue={{ audit_filter }}&group_issue={{ group_issue_filter }}&page={{ page_obj.next_page_number }}">&raquo;</a>
+                            <a class="page-link" href="?search={{ search }}&rank={{ rank_filter }}&mismatch={{ mismatch_filter }}&audit_issue={{ audit_filter }}&group_issue={{ group_issue_filter }}&status={{ status_filter }}&label={{ label_filter }}&page={{ page_obj.next_page_number }}">&raquo;</a>
                         </li>
                         {% else %}
                         <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
