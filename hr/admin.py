@@ -62,9 +62,9 @@ class HrConfigurationAdmin(admin.ModelAdmin):
 
         users = (
             User.objects.filter(profile__state=config.aa_state)
+            .select_related("hr_rank_assignment")
             .prefetch_related(
                 "character_ownerships__character__characteraudit__characterroles__titles",
-                "hr_rank_assignments",
             )
         )
         if home_corp_id:
@@ -75,7 +75,7 @@ class HrConfigurationAdmin(admin.ModelAdmin):
         no_match = 0
 
         for user in users:
-            if RankAssignment.objects.filter(user=user).exists():
+            if hasattr(user, 'hr_rank_assignment'):
                 skipped += 1
                 continue
 

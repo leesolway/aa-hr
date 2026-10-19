@@ -183,7 +183,7 @@ def member_list(request):
 
     if status_filter == "active":
         members = [m for m in members if not m["alerts"].member_status]
-    elif status_filter in ("away", "break"):
+    elif status_filter in (MemberStatusAssignment.AWAY, MemberStatusAssignment.INACTIVE):
         members = [
             m for m in members
             if m["alerts"].member_status and m["alerts"].member_status.status == status_filter
@@ -284,7 +284,7 @@ def member_detail(request, user_id):
 
     try:
         teamspeak3_user = member_user.teamspeak3
-    except Exception:
+    except AttributeError:
         teamspeak3_user = None
 
     member_role_assignments = None
@@ -309,6 +309,7 @@ def member_detail(request, user_id):
         "teamspeak3_user": teamspeak3_user,
         "member_role_assignments": member_role_assignments,
         "all_roles": all_roles,
+        "inactive_status_value": MemberStatusAssignment.INACTIVE,
     })
 
 
@@ -441,7 +442,7 @@ def member_dashboard(request):
 
     try:
         teamspeak3_user = user.teamspeak3
-    except Exception:
+    except AttributeError:
         teamspeak3_user = None
 
     return render(request, "hr/member_dashboard.html", {

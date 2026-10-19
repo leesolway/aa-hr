@@ -72,7 +72,9 @@ def sync_group_removal(sender, instance, action, pk_set, **kwargs):
         ]
 
     for user, group_pk_set in user_group_pairs:
-        # Remove label assignments whose group was revoked externally
+        # Remove label assignments whose group was revoked externally.
+        # Bypasses remove_label() intentionally — the group is already gone so we
+        # must not call _group_remove() again; we just clean up the assignment record.
         affected_labels = list(
             MemberLabelAssignment.objects.filter(
                 user=user,
@@ -123,7 +125,8 @@ def sync_group_removal(sender, instance, action, pk_set, **kwargs):
                     status_to_clear, user,
                 )
 
-        # Remove role assignments whose group was revoked externally
+        # Remove role assignments whose group was revoked externally.
+        # Bypasses remove_role() intentionally — same reason as labels above.
         affected_roles = list(
             RoleAssignment.objects.filter(
                 user=user,

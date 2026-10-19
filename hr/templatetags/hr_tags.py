@@ -32,15 +32,19 @@ def is_in(value, collection):
     return value in collection
 
 
-@register.simple_tag
-def get_status_choices():
+@register.simple_tag(takes_context=True)
+def get_status_choices(context):
     """Return status (value, label) pairs using the configured display names."""
     from hr.models import HrConfiguration
-    return HrConfiguration.get_solo().status_choices()
+    if '_hr_config' not in context:
+        context['_hr_config'] = HrConfiguration.get_solo()
+    return context['_hr_config'].status_choices()
 
 
-@register.simple_tag
-def status_label(status_value):
+@register.simple_tag(takes_context=True)
+def status_label(context, status_value):
     """Return the configured display label for a status value."""
     from hr.models import HrConfiguration
-    return HrConfiguration.get_solo().status_label(status_value)
+    if '_hr_config' not in context:
+        context['_hr_config'] = HrConfiguration.get_solo()
+    return context['_hr_config'].status_label(status_value)

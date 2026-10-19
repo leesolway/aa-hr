@@ -165,7 +165,7 @@
                                 <option value="{{ value }}"
                                     {% if alerts.member_status and alerts.member_status.status == value %}selected
                                     {% elif not alerts.member_status and value == "active" %}selected{% endif %}>
-                                    {{ label }}{% if value == "break" %} ({% trans "removes rank" %}){% endif %}
+                                    {{ label }}{% if value == inactive_status_value %} ({% trans "removes rank" %}){% endif %}
                                 </option>
                                 {% endfor %}
                             </select>

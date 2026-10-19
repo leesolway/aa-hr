@@ -215,7 +215,8 @@
                                         data-bs-toggle="modal"
                                         data-bs-target="#snoozeModal"
                                         data-user-id="{{ member.user.pk }}"
-                                        data-user-name="{{ member.main.character_name }}">
+                                        data-user-name="{{ member.main.character_name }}"
+                                        data-snooze-url="{% url 'hr:snooze_warning' member.user.pk %}">
                                     <i class="fa-solid fa-bell-slash"></i>
                                 </button>
                                 {% endif %}
@@ -349,7 +350,7 @@
         const userId = btn.getAttribute('data-user-id');
         const userName = btn.getAttribute('data-user-name');
         document.getElementById('snoozeTargetName').textContent = userName;
-        document.getElementById('snoozeForm').action = '/hr/user/' + userId + '/snooze/';
+        document.getElementById('snoozeForm').action = btn.getAttribute('data-snooze-url');
         document.getElementById('snoozeNote').value = '';
         document.getElementById('snoozeExpiry').value = '';
     });

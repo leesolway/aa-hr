@@ -42,7 +42,7 @@ class HrMemberMenu(MenuItemHook):
         )
 
     def render(self, request):
-        if request.user.has_perm("hr.member_access") and not request.user.has_perm("hr.access_hr"):
+        if request.user.has_perm("hr.member_access"):
             return MenuItemHook.render(self, request)
         return ""
 
